@@ -42,7 +42,10 @@ class RefreshToken(Base, TimestampMixin):
 
     user: Mapped[User] = relationship(back_populates="refresh_tokens")
 
-    __table_args__ = (Index("ix_refresh_tokens_user_id", "user_id"),)
+    __table_args__ = (
+        Index("ix_refresh_tokens_user_id", "user_id"),
+        Index("ix_refresh_tokens_token_hash", "token_hash"),
+    )
 
 
 class OAuthAccount(Base, TimestampMixin):

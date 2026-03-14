@@ -21,7 +21,6 @@ from app.core.security import (
     create_access_token,
     generate_refresh_token,
     hash_token,
-    verify_token,
 )
 from app.core.deps import get_current_user
 
@@ -52,19 +51,15 @@ async def _create_tokens(user: User, session: AsyncSession) -> TokenResponse:
 
 @router.post("/refresh", response_model=ApiResponse)
 async def refresh(body: RefreshRequest, session: Annotated[AsyncSession, Depends(get_session)]):
+    token_hash = hash_token(body.refresh_token)
     result = await session.execute(
         select(RefreshToken).where(
+            RefreshToken.token_hash == token_hash,
             RefreshToken.is_revoked == False,  # noqa: E712
             RefreshToken.expires_at > datetime.now(timezone.utc),
         )
     )
-    tokens = result.scalars().all()
-
-    matched: RefreshToken | None = None
-    for tok in tokens:
-        if verify_token(body.refresh_token, tok.token_hash):
-            matched = tok
-            break
+    matched = result.scalar_one_or_none()
 
     if not matched:
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="无效或已过期的刷新令牌")
@@ -76,22 +71,31 @@ async def refresh(body: RefreshRequest, session: Annotated[AsyncSession, Depends
         raise HTTPException(status_code=status.HTTP_401_UNAUTHORIZED, detail="用户不存在")
 
     new_tokens = await _create_tokens(user, session)
-    return ApiResponse(code=0, message="令牌已刷新", data=new_tokens.model_dump())
+    return ApiResponse(code=0, message="令牌已刷新", data={
+        **new_tokens.model_dump(),
+        "user": {
+            "id": user.id,
+            "email": user.email,
+            "display_name": user.display_name,
+            "avatar_url": user.avatar_url,
+            "onboarding_completed": user.onboarding_completed,
+        },
+    })
 
 
 @router.post("/logout", response_model=ApiResponse)
 async def logout(body: RefreshRequest, session: Annotated[AsyncSession, Depends(get_session)]):
+    token_hash = hash_token(body.refresh_token)
     result = await session.execute(
-        select(RefreshToken).where(RefreshToken.is_revoked == False)  # noqa: E712
+        select(RefreshToken).where(
+            RefreshToken.token_hash == token_hash,
+            RefreshToken.is_revoked == False,  # noqa: E712
+        )
     )
-    for tok in result.scalars().all():
-        try:
-            if verify_token(body.refresh_token, tok.token_hash):
-                tok.is_revoked = True
-                await session.commit()
-                break
-        except Exception:
-            continue
+    tok = result.scalar_one_or_none()
+    if tok:
+        tok.is_revoked = True
+        await session.commit()
     return ApiResponse(code=0, message="已退出登录")
 
 
