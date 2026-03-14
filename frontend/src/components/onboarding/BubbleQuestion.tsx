@@ -16,6 +16,8 @@ export default function BubbleQuestion({
   depth = 0,
 }: BubbleQuestionProps) {
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
+  const [questionNote, setQuestionNote] = useState('');
+  const [noteVisible, setNoteVisible] = useState(false);
   const currentValue = answers[question.id];
 
   if (question.type === 'text') {
@@ -108,18 +110,54 @@ export default function BubbleQuestion({
     (o) => isSelected(o.id) && o.isCustomInput
   ) || [];
 
+  // 避免最后一行只有 1 个：选 cols 使得 n % cols !== 1
+  const n = visibleOptions?.length ?? 0;
+  const getCols = (len: number) => {
+    if (len <= 4) return 4;
+    for (const c of [4, 3, 5, 2]) {
+      if (len % c !== 1) return c;
+    }
+    return 3;
+  };
+  const cols = getCols(n);
+
   return (
     <div className={`${depth > 0 ? 'ml-6 mt-3' : ''}`}>
-      <h3 className={`font-serif font-medium mb-3 ${depth > 0 ? 'text-sm text-monet-haze' : 'text-lg text-monet-leaf'}`}>
-        {question.title}
+      <h3 className={`font-serif font-medium mb-3 flex items-center flex-wrap gap-2 ${depth > 0 ? 'text-sm text-monet-haze' : 'text-lg text-monet-leaf'}`}>
+        <span>{question.title}</span>
         {isMulti && question.maxSelections && (
-          <span className="text-sm text-monet-haze font-normal ml-2">
+          <span className="text-sm text-monet-haze font-normal">
             （{question.minSelections ? `选 ${question.minSelections}-${question.maxSelections} 个` : `最多选 ${question.maxSelections} 个`}，已选 {selectedValues.length}）
           </span>
         )}
+        {/* Per-question free text note trigger */}
+        <span className="inline-flex items-center ml-3 gap-2">
+          <button
+            type="button"
+            onClick={() => setNoteVisible((v) => !v)}
+            className="leading-none cursor-pointer select-none"
+          >
+            ✍🏻
+          </button>
+          {noteVisible && (
+            <input
+              type="text"
+              value={questionNote}
+              onChange={(e) => {
+                setQuestionNote(e.target.value);
+                onAnswer(`${question.id}_note`, e.target.value);
+              }}
+              placeholder="其实我……"
+              className="text-sm px-2 py-1 border-b border-monet-haze/50 bg-transparent outline-none font-serif"
+            />
+          )}
+        </span>
       </h3>
 
-      <div className="flex flex-wrap justify-center gap-4">
+      <div
+        className="grid gap-4 justify-items-center"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(7rem, 1fr))` }}
+      >
         {visibleOptions?.map((option) => {
           const selected = isSelected(option.id);
           return (
@@ -130,22 +168,16 @@ export default function BubbleQuestion({
               onClick={() => handleSelect(option)}
               className={`relative flex items-center justify-center rounded-full text-sm font-medium transition-all font-serif
                 w-28 h-28 md:w-32 md:h-32
+                bg-white/70 text-monet-leaf border
                 ${
                   selected
-                    ? 'bg-black text-white shadow-monet-lg border-2 border-monet-sage'
-                    : 'bg-white/70 text-monet-leaf border border-monet-haze/40 hover:border-monet-sage/70'
+                    ? 'border-2 border-black'
+                    : 'border-monet-haze/40 opacity-70 hover:opacity-100 hover:border-monet-cobalt/80'
                 }`}
-              style={
-                selected
-                  ? {
-                      boxShadow:
-                        '0 0 0 1px rgba(0,0,0,0.8), 0 0 35px rgba(128,210,175,0.6)',
-                    }
-                  : {
-                      backgroundImage:
-                        'radial-gradient(circle at 30% 20%, rgba(128,210,175,0.2), transparent 55%), radial-gradient(circle at 70% 80%, rgba(221,137,196,0.16), transparent 55%)',
-                    }
-              }
+              style={{
+                backgroundImage:
+                  'linear-gradient(45deg, rgba(62,123,191,0.24) 0%, rgba(62,123,191,0.16) 20%, rgba(255,255,255,1) 45%, rgba(255,255,255,1) 65%, rgba(255,138,61,0.2) 82%, rgba(255,138,61,0.32) 100%)',
+              }}
             >
               <span className="text-center px-3 leading-relaxed">{option.label}</span>
             </motion.button>
