@@ -16,6 +16,8 @@ export default function BubbleQuestion({
   depth = 0,
 }: BubbleQuestionProps) {
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
+  const [questionNote, setQuestionNote] = useState('');
+  const [noteVisible, setNoteVisible] = useState(false);
   const currentValue = answers[question.id];
 
   if (question.type === 'text') {
@@ -108,18 +110,54 @@ export default function BubbleQuestion({
     (o) => isSelected(o.id) && o.isCustomInput
   ) || [];
 
+  // 避免最后一行只有 1 个：选 cols 使得 n % cols !== 1
+  const n = visibleOptions?.length ?? 0;
+  const getCols = (len: number) => {
+    if (len <= 4) return 4;
+    for (const c of [4, 3, 5, 2]) {
+      if (len % c !== 1) return c;
+    }
+    return 3;
+  };
+  const cols = getCols(n);
+
   return (
     <div className={`${depth > 0 ? 'ml-6 mt-3' : ''}`}>
-      <h3 className={`font-serif font-medium mb-3 ${depth > 0 ? 'text-sm text-monet-haze' : 'text-lg text-monet-leaf'}`}>
-        {question.title}
+      <h3 className={`font-serif font-medium mb-3 flex items-center flex-wrap gap-2 ${depth > 0 ? 'text-sm text-monet-haze' : 'text-lg text-monet-leaf'}`}>
+        <span>{question.title}</span>
         {isMulti && question.maxSelections && (
-          <span className="text-sm text-monet-haze font-normal ml-2">
+          <span className="text-sm text-monet-haze font-normal">
             （{question.minSelections ? `选 ${question.minSelections}-${question.maxSelections} 个` : `最多选 ${question.maxSelections} 个`}，已选 {selectedValues.length}）
           </span>
         )}
+        {/* Per-question free text note trigger */}
+        <span className="inline-flex items-center ml-3 gap-2">
+          <button
+            type="button"
+            onClick={() => setNoteVisible((v) => !v)}
+            className="leading-none cursor-pointer select-none"
+          >
+            ✍🏻
+          </button>
+          {noteVisible && (
+            <input
+              type="text"
+              value={questionNote}
+              onChange={(e) => {
+                setQuestionNote(e.target.value);
+                onAnswer(`${question.id}_note`, e.target.value);
+              }}
+              placeholder="其实我……"
+              className="text-sm px-2 py-1 border-b border-monet-haze/50 bg-transparent outline-none font-serif"
+            />
+          )}
+        </span>
       </h3>
 
-      <div className="flex flex-wrap justify-center gap-4">
+      <div
+        className="grid gap-4 justify-items-center"
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(7rem, 1fr))` }}
+      >
         {visibleOptions?.map((option) => {
           const selected = isSelected(option.id);
           return (

@@ -95,11 +95,30 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
 
   return (
     <div className="max-w-2xl mx-auto px-4">
-      {/* Progress bar */}
+      {/* Progress bar + Skip (top) for skippable sections */}
       <div className="mb-8">
-        <div className="flex justify-between text-sm text-monet-haze mb-2 font-serif">
+        <div className="flex justify-between items-center text-sm text-monet-haze mb-2 font-serif">
           <span>{section.title}</span>
-          <span>{currentSection + 1} / {totalSections}</span>
+          <span className="flex items-center gap-3">
+            {section.skippable && (
+              section.id === 'daily_texture' ? (
+                <button
+                  onClick={handleSkipSection}
+                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-monet-haze/50 text-monet-haze hover:border-monet-cobalt hover:text-monet-cobalt transition-colors"
+                >
+                  轻松可选，随意作答 · 跳过本部分
+                </button>
+              ) : (
+                <button
+                  onClick={handleSkipSection}
+                  className="text-monet-haze hover:text-monet-cobalt transition-colors"
+                >
+                  跳过本部分
+                </button>
+              )
+            )}
+            <span>{currentSection + 1} / {totalSections}</span>
+          </span>
         </div>
         <div className="h-2 bg-monet-haze/20 rounded-full overflow-hidden">
           <motion.div
@@ -120,7 +139,7 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
           exit={{ opacity: 0, x: -30 }}
           transition={{ duration: 0.3 }}
         >
-          {section.subtitle && (
+          {section.subtitle && section.id !== 'daily_texture' && (
             <p className="text-monet-haze mb-6 font-serif">{section.subtitle}</p>
           )}
 
@@ -163,21 +182,13 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
         </button>
 
         <div className="flex gap-3">
-          {section.skippable && (
-            <button
-              onClick={handleSkipSection}
-              className="px-6 py-2.5 text-monet-haze hover:text-monet-cobalt transition-colors font-serif border border-monet-haze/30 rounded-full"
-            >
-              跳过本部分
-            </button>
-          )}
           <button
             onClick={handleNext}
             disabled={!isSectionComplete() || submitting}
             className="px-8 py-2.5 bg-monet-sage text-white rounded-full font-medium hover:bg-monet-sage/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-monet hover:shadow-monet-lg font-serif"
           >
             {submitting
-              ? '提交中...'
+              ? '齿轮转动中..'
               : isLastSection
                 ? '准备好啦，和另一个我相遇吧'
                 : '下一步 \u2192'}

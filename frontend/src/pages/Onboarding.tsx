@@ -55,9 +55,9 @@ export default function Onboarding() {
 
   return (
     <div className="relative min-h-screen flex flex-col overflow-hidden">
-      {/* Blurred oil painting background */}
+      {/* Blurred oil painting background — fixed to viewport, never scrolls or resizes */}
       <div
-        className="pointer-events-none absolute inset-0 bg-cover bg-no-repeat blur-sm transform-gpu scale-105"
+        className="pointer-events-none fixed inset-0 bg-cover bg-no-repeat blur-sm"
         style={{
           backgroundImage: "url('/onboarding-sunrise.png')",
           backgroundRepeat: "no-repeat",
@@ -66,7 +66,7 @@ export default function Onboarding() {
         }}
       />
 
-      <div className="relative flex-1 flex items-center justify-center px-4 py-10">
+      <div className="relative flex-1 flex items-start justify-center px-4 py-10 overflow-y-auto">
         <div
           className="relative w-full max-w-3xl rounded-[32px] shadow-monet-lg border border-white/20"
           style={{
@@ -76,7 +76,7 @@ export default function Onboarding() {
           {/* Header */}
           <div className="px-8 pt-7 pb-4 flex items-center justify-between">
             <h2 className="text-sm font-medium text-monet-leaf/80 font-serif tracking-wide">
-              {isRedo ? "重新认识你" : "认识你"}
+              {isRedo ? "和自己聊聊" : "认识你"}
             </h2>
             {isRedo && (
               <button
