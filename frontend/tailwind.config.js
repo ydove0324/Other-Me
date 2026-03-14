@@ -7,15 +7,22 @@ export default {
   theme: {
     extend: {
       colors: {
-        // 莫奈睡莲色系
+        // 「印象·日出」色系：更接近油画本身
         monet: {
-          cream: '#f0eec8',
-          sage: '#80d2af',
-          haze: '#7b9e9e',
-          dust: '#e8e4d8',
-          lotus: '#dd89c4',
-          leaf: '#103811',
-          cobalt: '#4e73d6',
+          // 清晨雾气里的浅蓝灰
+          cream: '#C9D3E0',
+          // 太阳与倒影的橙光
+          sage: '#FF8A3D',
+          // 远景与天空的蓝紫
+          haze: '#6F8FB2',
+          // 水面上略暖的灰蓝
+          dust: '#A9C7CF',
+          // 靠近岸边的深蓝绿
+          lotus: '#245B73',
+          // 最暗的剪影海军蓝
+          leaf: '#102335',
+          // 更亮一点的天光蓝
+          cobalt: '#3E7BBF',
         },
         brand: {
           50: '#f0f7ff',

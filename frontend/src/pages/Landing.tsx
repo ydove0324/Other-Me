@@ -17,9 +17,11 @@ export default function Landing() {
       {/* Hero */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
         <div className="max-w-2xl mx-auto">
-          <h1 className="font-serif text-5xl md:text-6xl font-bold tracking-tight text-[#103811] mb-6">
+          <h1 className="font-serif text-5xl md:text-6xl font-bold tracking-tight text-monet-leaf mb-6">
             另一个
-            <span className="bg-gradient-to-r from-monet-sage to-monet-haze bg-clip-text text-transparent">我</span>
+            <span className="bg-gradient-to-r from-monet-cobalt via-white to-monet-sage bg-clip-text text-transparent">
+              我
+            </span>
           </h1>
           <p className="font-serif text-xl md:text-2xl text-monet-haze font-light mb-4">
             与未选择的自己重逢

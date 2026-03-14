@@ -37,6 +37,7 @@ export const quizConfig: QuizSection[] = [
           { id: 'introvert', label: '安静观察，享受独处' },
           { id: 'extrovert', label: '活跃社交，人群中充电' },
           { id: 'ambivert', label: '看心情，两者之间切换' },
+          { id: 'personality_type_custom', label: '其实我 ____', allowCustomText: true },
         ],
       },
       {
@@ -49,6 +50,7 @@ export const quizConfig: QuizSection[] = [
           { id: 'intuition', label: '跟着直觉走' },
           { id: 'others', label: '听听身边人的建议' },
           { id: 'mixed', label: '分析 + 直觉，看情况' },
+          { id: 'decision_style_custom', label: '其实我 ____', allowCustomText: true },
         ],
       },
       {
@@ -68,6 +70,7 @@ export const quizConfig: QuizSection[] = [
           { id: 'independent', label: '独立自主' },
           { id: 'romantic', label: '浪漫主义' },
           { id: 'practical', label: '务实接地气' },
+          { id: 'personality_traits_custom', label: '其实我 ____', allowCustomText: true },
         ],
       },
     ],
@@ -88,6 +91,7 @@ export const quizConfig: QuizSection[] = [
           { id: 'love', label: '爱与被爱' },
           { id: 'achievement', label: '成就感' },
           { id: 'growth', label: '成长与体验' },
+          { id: 'life_priority_custom', label: '其实我 ____', allowCustomText: true },
         ],
       },
       {
@@ -110,6 +114,7 @@ export const quizConfig: QuizSection[] = [
           { id: 'livelihood', label: '养家糊口的工具' },
           { id: 'identity', label: '身份认同的来源' },
           { id: 'social', label: '社交和归属感' },
+          { id: 'career_attitude_custom', label: '其实我 ____', allowCustomText: true },
         ],
       },
       {
@@ -121,6 +126,7 @@ export const quizConfig: QuizSection[] = [
           { id: 'free_spirit', label: '保持距离，彼此独立' },
           { id: 'companionship', label: '细水长流的陪伴' },
           { id: 'exploring', label: '还在探索中' },
+          { id: 'relationship_style_custom', label: '其实我 ____', allowCustomText: true },
         ],
       },
     ],
@@ -141,6 +147,7 @@ export const quizConfig: QuizSection[] = [
           { id: '29-35', label: '29-35 而立之年' },
           { id: '36-45', label: '36-45 中流砥柱' },
           { id: '46+', label: '46+ 丰盈人生' },
+          { id: 'age_range_custom', label: '其实我 ____', allowCustomText: true },
         ],
       },
       {
@@ -153,6 +160,7 @@ export const quizConfig: QuizSection[] = [
           { id: 'confused', label: '迷茫困惑' },
           { id: 'excited', label: '充满期待' },
           { id: 'tired', label: '疲惫但坚持' },
+          { id: 'current_mood_custom', label: '其实我 ____', allowCustomText: true },
         ],
       },
       {

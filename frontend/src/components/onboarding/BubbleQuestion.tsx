@@ -88,22 +88,16 @@ export default function BubbleQuestion({
               onClick={() => handleSelect(option.id)}
               className={`relative flex items-center justify-center rounded-full text-sm font-medium transition-all font-serif
                 w-28 h-28 md:w-32 md:h-32
+                bg-white/70 text-monet-leaf border
                 ${
                   selected
-                    ? 'bg-black text-white shadow-monet-lg border-2 border-monet-sage'
-                    : 'bg-white/70 text-monet-leaf border border-monet-haze/40 hover:border-monet-sage/70'
+                    ? 'border-2 border-black'
+                    : 'border-monet-haze/40 opacity-70 hover:opacity-100 hover:border-monet-cobalt/80'
                 }`}
-              style={
-                selected
-                  ? {
-                      boxShadow:
-                        '0 0 0 1px rgba(0,0,0,0.8), 0 0 35px rgba(128,210,175,0.6)',
-                    }
-                  : {
-                      backgroundImage:
-                        'radial-gradient(circle at 30% 20%, rgba(128,210,175,0.2), transparent 55%), radial-gradient(circle at 70% 80%, rgba(221,137,196,0.16), transparent 55%)',
-                    }
-              }
+              style={{
+                backgroundImage:
+                  'linear-gradient(45deg, rgba(62,123,191,0.24) 0%, rgba(62,123,191,0.16) 20%, rgba(255,255,255,1) 45%, rgba(255,255,255,1) 65%, rgba(255,138,61,0.2) 82%, rgba(255,138,61,0.32) 100%)',
+              }}
             >
               <span className="text-center px-3 leading-relaxed">{option.label}</span>
             </motion.button>
