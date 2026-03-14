@@ -103,3 +103,7 @@ print(response.json())
 第三步
 
 - 后面生成LifeTime Story 的时候，结合用户的漫画角色，和 AI 生成的故事，生成对应的图像, 要让 AI 先生成全部的故事，然后规划一下，4 ～ 5 个 BLock 图像都要是什么（要连贯），然后再并发生成图像, 然后都存到 AliYun OSS
+
+
+export OSS_ACCESS_KEY_ID='YOUR_ACCESS_KEY_ID'
+export OSS_ACCESS_KEY_SECRET='YOUR_ACCESS_KEY_SECRET'

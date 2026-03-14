@@ -315,8 +315,12 @@ async def generate_life_stream_endpoint(
     if not fp:
         raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
 
+    # If a previous stream was aborted mid-flight (client disconnected),
+    # fp.status can be stuck as 'generating' because CancelledError bypasses
+    # except-Exception blocks. Reset it so the user can regenerate.
     if fp.status == ForkPointStatus.generating:
-        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="正在生成中，请稍候")
+        fp.status = ForkPointStatus.failed
+        await session.flush()
 
     from app.services.ai.pipeline import generate_life_blocks_stream
     user_answers = request.answers if request else None
@@ -325,7 +329,8 @@ async def generate_life_stream_endpoint(
         try:
             async for event in generate_life_blocks_stream(user.id, fork_point_id, session, user_answers=user_answers):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
-        except Exception as e:
+        except BaseException as e:
+            # Catch CancelledError (client disconnect) and other exceptions
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
         yield "data: [DONE]\n\n"
 

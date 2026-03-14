@@ -594,7 +594,7 @@ async def generate_story_questions(
     data, _ = await call_llm_json([
         {"role": "system", "content": "你是一位故事策划师。请用 JSON 格式回复。"},
         {"role": "user", "content": prompt},
-    ], temperature=0.8, max_tokens=1024)
+    ], temperature=0.8)
 
     return data.get("questions", [])
 
@@ -683,7 +683,7 @@ async def generate_life_blocks_stream(
     _BLOCK_MARKER = _re.compile(r"<!--\s*BLOCK\s+(\d+)\s*-->")
     _HEADING = _re.compile(r"^##\s+(.+)$", _re.MULTILINE)
 
-    try:
+    try:  # noqa: SIM105
         async for chunk in call_llm_stream(
             [
                 {"role": "system", "content": "你是一位才华横溢的叙事作家。请用 Markdown 格式写故事，用 <!-- BLOCK n --> 分隔章节。"},
@@ -774,7 +774,9 @@ async def generate_life_blocks_stream(
         task.completed_at = datetime.now(timezone.utc)
         await session.commit()
 
-    except Exception as e:
+    except BaseException as e:
+        # BaseException catches CancelledError (client disconnect) in addition to
+        # regular exceptions, ensuring fp.status never stays stuck as 'generating'.
         life.status = LifeStatus.failed
         fp.status = ForkPointStatus.failed
         task.status = TaskStatus.failed
