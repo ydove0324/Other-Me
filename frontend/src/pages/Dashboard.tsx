@@ -43,6 +43,12 @@ export default function Dashboard() {
           <h1 className="text-xl font-bold text-monet-leaf font-serif">另一个我</h1>
           <div className="flex items-center gap-4">
             <button
+              onClick={() => navigate("/onboarding?redo=true")}
+              className="text-sm text-monet-haze hover:text-monet-leaf transition-colors font-serif"
+            >
+              重做测试
+            </button>
+            <button
               onClick={() => navigate("/profile")}
               className="flex items-center gap-2 group"
             >

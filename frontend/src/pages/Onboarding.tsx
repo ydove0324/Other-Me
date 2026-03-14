@@ -1,79 +1,55 @@
-import { useState, useEffect } from "react";
-import { useNavigate } from "react-router-dom";
+import { useEffect } from "react";
+import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import BubbleQuiz from "../components/onboarding/BubbleQuiz";
-import ForkPointInput from "../components/onboarding/ForkPointInput";
-import StoryView from "./StoryView";
 import api from "../services/api";
 
-const STEPS = ["认识你", "人生岔路", "另一个我"];
-
 export default function Onboarding() {
-  const [step, setStep] = useState(0);
-  const [forkPointId, setForkPointId] = useState<number | null>(null);
   const navigate = useNavigate();
+  const [searchParams] = useSearchParams();
+  const isRedo = searchParams.get("redo") === "true";
   const { user, fetchMe } = useAuthStore();
 
   useEffect(() => {
-    if (user?.onboarding_completed) {
+    if (user?.onboarding_completed && !isRedo) {
       navigate("/dashboard", { replace: true });
     }
-  }, [user, navigate]);
+  }, [user, navigate, isRedo]);
 
-  const handleQuizComplete = () => {
-    setStep(1);
-  };
-
-  const handleForkPointComplete = (id: number) => {
-    setForkPointId(id);
-    setStep(2);
-  };
-
-  const handleStoryComplete = async () => {
+  const handleQuizComplete = async () => {
     try {
-      await api.post("/profile/complete-onboarding");
+      if (!isRedo) {
+        await api.post("/profile/complete-onboarding");
+      }
       await fetchMe();
-      navigate("/dashboard", { replace: true });
     } catch {
-      navigate("/dashboard", { replace: true });
+      // ignore
     }
+    navigate("/dashboard", { replace: true });
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      {/* Progress */}
-      <div className="border-b border-gray-100">
-        <div className="max-w-3xl mx-auto px-6 py-4">
-          <div className="flex items-center justify-between mb-3">
-            <h2 className="text-sm font-medium text-gray-500">
-              步骤 {step + 1} / {STEPS.length}
-            </h2>
-            <span className="text-sm text-gray-400">{STEPS[step]}</span>
-          </div>
-          <div className="w-full bg-gray-100 rounded-full h-1.5">
-            <div
-              className="bg-indigo-500 h-1.5 rounded-full transition-all duration-500"
-              style={{ width: `${((step + 1) / STEPS.length) * 100}%` }}
-            />
-          </div>
+    <div className="min-h-screen bg-canvas bg-gradient-to-b from-[#f0eec8] via-[#e8e8dc] to-[#dde8e0]">
+      {/* Header */}
+      <div className="border-b border-monet-haze/20">
+        <div className="max-w-3xl mx-auto px-6 py-4 flex items-center justify-between">
+          <h2 className="text-sm font-medium text-monet-haze font-serif">
+            {isRedo ? "重新认识你" : "认识你"}
+          </h2>
+          {isRedo && (
+            <button
+              onClick={() => navigate("/dashboard")}
+              className="text-sm text-monet-haze hover:text-monet-leaf transition-colors font-serif"
+            >
+              ← 返回
+            </button>
+          )}
         </div>
       </div>
 
       {/* Content */}
       <div className="max-w-3xl mx-auto px-6 py-8">
-        {step === 0 && (
-          <BubbleQuiz onComplete={handleQuizComplete} />
-        )}
-        {step === 1 && (
-          <ForkPointInput onComplete={handleForkPointComplete} />
-        )}
-        {step === 2 && forkPointId && (
-          <StoryView
-            forkPointId={forkPointId}
-            onComplete={handleStoryComplete}
-            embedded
-          />
-        )}
+        <BubbleQuiz onComplete={handleQuizComplete} />
       </div>
     </div>
   );
