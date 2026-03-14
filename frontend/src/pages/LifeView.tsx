@@ -8,14 +8,23 @@ import type {
   StoryQuestion, UserAnswer,
 } from '../types';
 
-type Phase = 'init' | 'thinking' | 'asking' | 'streaming' | 'done';
+// Phase flow: init → thinking_q → asking → thinking_g → streaming → done
+// thinking_q: loading questions
+// thinking_g: brief transition after user submits answers, before stream starts
+type Phase = 'init' | 'thinking_q' | 'asking' | 'thinking_g' | 'streaming' | 'done';
 
 const SKELETON_COUNT = 5;
 
-const THINKING_MESSAGES = [
+const THINKING_Q_MESSAGES = [
   '正在分析你的性格画像...',
   '正在寻找这段旅程的关键时刻...',
   '想为你定制几个问题...',
+];
+
+const THINKING_G_MESSAGES = [
+  '正在理解你的期望...',
+  '正在构建故事的骨架...',
+  '正在书写另一种人生...',
 ];
 
 export default function LifeView() {
@@ -26,7 +35,6 @@ export default function LifeView() {
   const [forkPoint, setForkPoint] = useState<ForkPoint | null>(null);
   const [blocks, setBlocks] = useState<LifeBlock[]>([]);
   const [questions, setQuestions] = useState<StoryQuestion[]>([]);
-  // answers: questionId -> selected option text (or custom text)
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
   const [showCustomInput, setShowCustomInput] = useState<Record<string, boolean>>({});
@@ -35,7 +43,10 @@ export default function LifeView() {
   const abortRef = useRef<AbortController | null>(null);
   const blockRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const thinkingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
-  const thinkingStartRef = useRef<number>(0);
+
+  // Resolve message list for current thinking phase
+  const thinkingMessages =
+    phase === 'thinking_g' ? THINKING_G_MESSAGES : THINKING_Q_MESSAGES;
 
   // Fetch fork point info
   useEffect(() => {
@@ -43,42 +54,44 @@ export default function LifeView() {
     (async () => {
       try {
         const { data } = await api.get<ApiResponse<ForkPoint>>(`/fork-points/${forkPointId}`);
-        if (data.code === 0 && data.data) {
-          setForkPoint(data.data);
-        }
+        if (data.code === 0 && data.data) setForkPoint(data.data);
       } catch {
         setError('加载分岔点失败');
       }
     })();
   }, [forkPointId]);
 
-  // Typewriter effect for thinking messages
+  // Looping typewriter animation for both thinking phases
   useEffect(() => {
-    if (phase !== 'thinking') {
+    if (phase !== 'thinking_q' && phase !== 'thinking_g') {
       if (thinkingTimerRef.current) clearInterval(thinkingTimerRef.current);
+      setThinkingStep(0);
       return;
     }
     setThinkingStep(0);
     thinkingTimerRef.current = setInterval(() => {
-      setThinkingStep((s) => Math.min(s + 1, THINKING_MESSAGES.length - 1));
+      // Loop back to 0 after last message so animation never freezes
+      setThinkingStep((s) => (s + 1) % thinkingMessages.length);
     }, 800);
     return () => {
       if (thinkingTimerRef.current) clearInterval(thinkingTimerRef.current);
     };
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [phase]);
 
-  // Try to load existing blocks from GET endpoint
+  // Try to load existing blocks from cache
   const fetchBlocks = useCallback(async (): Promise<boolean> => {
     try {
       const res = await api.get<ApiResponse<LifeBlocksData>>(`/fork-points/${forkPointId}/blocks`);
       if (res.data.data && res.data.data.blocks.length > 0) {
-        const loaded: LifeBlock[] = res.data.data.blocks.map((s) => ({
-          index: s.sort_order,
-          title: s.title || `第${s.sort_order}章`,
-          content: s.content || '',
-          status: 'completed' as const,
-        }));
-        setBlocks(loaded);
+        setBlocks(
+          res.data.data.blocks.map((s) => ({
+            index: s.sort_order,
+            title: s.title || `第${s.sort_order}章`,
+            content: s.content || '',
+            status: 'completed' as const,
+          }))
+        );
         return true;
       }
     } catch {
@@ -87,10 +100,9 @@ export default function LifeView() {
     return false;
   }, [forkPointId]);
 
-  // Fetch questions and show asking phase
+  // Fetch questions then show asking phase (min 2.5s thinking animation)
   const loadQuestionsAndShow = useCallback(async () => {
-    setPhase('thinking');
-    thinkingStartRef.current = Date.now();
+    setPhase('thinking_q');
     setSelectedAnswers({});
     setCustomInputs({});
     setShowCustomInput({});
@@ -98,53 +110,49 @@ export default function LifeView() {
     try {
       const [res] = await Promise.all([
         api.get<ApiResponse<{ questions: StoryQuestion[] }>>(`/fork-points/${forkPointId}/story-questions`),
-        new Promise((resolve) => setTimeout(resolve, 2500)),
+        new Promise<void>((resolve) => setTimeout(resolve, 2500)),
       ]);
-      const qs = res.data.data?.questions ?? [];
-      setQuestions(qs);
+      setQuestions(res.data.data?.questions ?? []);
       setPhase('asking');
     } catch {
-      // On error, skip to streaming directly
-      setPhase('streaming');
-      startStream(undefined);
+      // On question-load failure, skip straight to generating
+      setPhase('thinking_g');
+      startStream([]);
     }
-  // eslint-disable-next-line react-hooks/exhaustive-deps
+    // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forkPointId]);
 
   // Start SSE stream
-  const startStream = useCallback(async (answers?: UserAnswer[]) => {
+  // Phase stays as-is (thinking_g or thinking_q fallback) until the first
+  // block_start event arrives — that's when we switch to 'streaming' and
+  // show skeleton blocks. This means the thinking animation runs exactly as
+  // long as LLM latency (typically 1-2s), with zero artificial delay.
+  const startStream = useCallback(async (answers: UserAnswer[]) => {
     abortRef.current?.abort();
     const controller = new AbortController();
     abortRef.current = controller;
+    let streamingStarted = false;
 
     setError('');
-    setPhase('streaming');
-    setBlocks(
-      Array.from({ length: SKELETON_COUNT }, (_, i) => ({
-        index: i + 1,
-        title: '',
-        content: '',
-        status: 'pending' as const,
-      }))
-    );
 
     const baseURL = import.meta.env.VITE_API_BASE_URL || '/api/v1';
     const token = getAccessToken();
 
     try {
-      const response = await fetch(`${baseURL}/fork-points/${forkPointId}/generate-life-stream`, {
-        method: 'POST',
-        headers: {
-          'Content-Type': 'application/json',
-          ...(token ? { Authorization: `Bearer ${token}` } : {}),
-        },
-        body: JSON.stringify({ answers: answers ?? [] }),
-        signal: controller.signal,
-      });
+      const response = await fetch(
+        `${baseURL}/fork-points/${forkPointId}/generate-life-stream`,
+        {
+          method: 'POST',
+          headers: {
+            'Content-Type': 'application/json',
+            ...(token ? { Authorization: `Bearer ${token}` } : {}),
+          },
+          body: JSON.stringify({ answers }),
+          signal: controller.signal,
+        }
+      );
 
-      if (!response.ok || !response.body) {
-        throw new Error(`HTTP ${response.status}`);
-      }
+      if (!response.ok || !response.body) throw new Error(`HTTP ${response.status}`);
 
       const reader = response.body.getReader();
       const decoder = new TextDecoder();
@@ -161,20 +169,26 @@ export default function LifeView() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
-
-          if (payload === '[DONE]') {
-            setPhase('done');
-            return;
-          }
+          if (payload === '[DONE]') { setPhase('done'); return; }
 
           try {
             const evt: BlockStreamEvent = JSON.parse(payload);
-
-            if (evt.type === 'error') {
-              throw new Error(evt.message || '生成失败');
-            }
+            if (evt.type === 'error') throw new Error(evt.message || '生成失败');
 
             if (evt.type === 'block_start' && evt.index !== undefined) {
+              // First block_start: transition out of thinking and show skeleton
+              if (!streamingStarted) {
+                streamingStarted = true;
+                setPhase('streaming');
+                setBlocks(
+                  Array.from({ length: SKELETON_COUNT }, (_, i) => ({
+                    index: i + 1,
+                    title: '',
+                    content: '',
+                    status: 'pending' as const,
+                  }))
+                );
+              }
               setBlocks((prev) => {
                 const idx = prev.findIndex((b) => b.index === evt.index);
                 if (idx >= 0) {
@@ -185,8 +199,7 @@ export default function LifeView() {
                 return [...prev, { index: evt.index!, title: evt.title || '', content: '', status: 'streaming' }];
               });
               setTimeout(() => {
-                const el = blockRefs.current.get(evt.index!);
-                el?.scrollIntoView({ behavior: 'smooth', block: 'start' });
+                blockRefs.current.get(evt.index!)?.scrollIntoView({ behavior: 'smooth', block: 'start' });
               }, 100);
             }
 
@@ -217,54 +230,50 @@ export default function LifeView() {
     }
   }, [forkPointId]);
 
-  // On mount: check cache or go to thinking
+  // On mount: check cache or kick off question loading
   useEffect(() => {
     fetchBlocks().then((exists) => {
-      if (exists) {
-        setPhase('done');
-      } else {
-        loadQuestionsAndShow();
-      }
+      if (exists) setPhase('done');
+      else loadQuestionsAndShow();
     });
     return () => abortRef.current?.abort();
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forkPointId]);
 
-  // Build UserAnswer array from selected/custom answers
-  const buildAnswers = (): UserAnswer[] => {
-    return questions
+  // Build UserAnswer[] from selected / custom inputs
+  const buildAnswers = (): UserAnswer[] =>
+    questions
       .map((q) => {
         const custom = showCustomInput[q.id] ? customInputs[q.id]?.trim() : undefined;
-        const selected = selectedAnswers[q.id];
-        const answer = custom || selected;
+        const answer = custom || selectedAnswers[q.id];
         if (!answer) return null;
         return { question: q.question, answer };
       })
       .filter(Boolean) as UserAnswer[];
-  };
 
-  const handleSubmitAnswers = () => {
-    startStream(buildAnswers());
-  };
+  // User submits answers → set thinking_g immediately → fire stream request
+  // (no artificial delay — thinking_g animation runs until first LLM token)
+  const handleSubmitAnswers = useCallback(() => {
+    const answers = buildAnswers();
+    setPhase('thinking_g');
+    startStream(answers);
+    // eslint-disable-next-line react-hooks/exhaustive-deps
+  }, [buildAnswers, startStream]);
 
-  const handleSkipAll = () => {
+  const handleSkipAll = useCallback(() => {
+    setPhase('thinking_g');
     startStream([]);
-  };
+  }, [startStream]);
 
   const toggleOption = (qId: string, option: string) => {
-    setSelectedAnswers((prev) => ({
-      ...prev,
-      [qId]: prev[qId] === option ? '' : option,
-    }));
+    setSelectedAnswers((prev) => ({ ...prev, [qId]: prev[qId] === option ? '' : option }));
     setShowCustomInput((prev) => ({ ...prev, [qId]: false }));
   };
 
   const toggleCustomInput = (qId: string) => {
     setShowCustomInput((prev) => {
       const next = !prev[qId];
-      if (next) {
-        setSelectedAnswers((sa) => ({ ...sa, [qId]: '' }));
-      }
+      if (next) setSelectedAnswers((sa) => ({ ...sa, [qId]: '' }));
       return { ...prev, [qId]: next };
     });
   };
@@ -274,6 +283,7 @@ export default function LifeView() {
   const pendingSkeletons = isStreaming
     ? blocks.filter((b) => b.status === 'pending' && b.content.length === 0)
     : [];
+  const isThinking = phase === 'thinking_q' || phase === 'thinking_g';
 
   return (
     <div className="min-h-screen bg-canvas bg-gradient-to-b from-[#f0eec8] via-[#e8e8dc] to-[#dde8e0]">
@@ -293,7 +303,7 @@ export default function LifeView() {
         </div>
       </header>
 
-      {/* Error */}
+      {/* Error banner */}
       {error && (
         <div className="max-w-4xl mx-auto px-6 mt-8">
           <div className="bg-red-50 border border-red-200 rounded-2xl p-6 text-center">
@@ -308,14 +318,14 @@ export default function LifeView() {
         </div>
       )}
 
-      {/* Thinking phase */}
+      {/* Thinking phase (both thinking_q and thinking_g) */}
       <AnimatePresence>
-        {phase === 'thinking' && !error && (
+        {isThinking && !error && (
           <motion.div
             key="thinking"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.2 } }}
             className="flex flex-col items-center justify-center min-h-[70vh] px-6"
           >
             <motion.div
@@ -323,14 +333,19 @@ export default function LifeView() {
               transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
               className="w-14 h-14 border-4 border-monet-haze/30 border-t-monet-sage rounded-full mb-8"
             />
-            <div className="space-y-3 text-center">
-              {THINKING_MESSAGES.map((msg, i) => (
+            <div className="space-y-3 text-center min-h-[5rem]">
+              {thinkingMessages.map((msg, i) => (
                 <motion.p
-                  key={msg}
+                  key={`${phase}-${msg}`}
                   initial={{ opacity: 0, y: 8 }}
-                  animate={{ opacity: i <= thinkingStep ? 1 : 0, y: i <= thinkingStep ? 0 : 8 }}
+                  animate={{
+                    opacity: i === thinkingStep ? 1 : i < thinkingStep ? 0.35 : 0,
+                    y: i <= thinkingStep ? 0 : 8,
+                  }}
                   transition={{ duration: 0.4 }}
-                  className={`font-serif text-base ${i === thinkingStep ? 'text-monet-leaf font-medium' : 'text-monet-haze'}`}
+                  className={`font-serif text-base ${
+                    i === thinkingStep ? 'text-monet-leaf font-medium' : 'text-monet-haze'
+                  }`}
                 >
                   {msg}
                 </motion.p>
@@ -347,7 +362,7 @@ export default function LifeView() {
             key="asking"
             initial={{ opacity: 0 }}
             animate={{ opacity: 1 }}
-            exit={{ opacity: 0 }}
+            exit={{ opacity: 0, transition: { duration: 0.2 } }}
             className="max-w-2xl mx-auto px-6 py-12"
           >
             <div className="text-center mb-10">
@@ -359,7 +374,7 @@ export default function LifeView() {
               </p>
             </div>
 
-            <div className="space-y-8 mb-24">
+            <div className="space-y-8 mb-28">
               {questions.map((q, qi) => (
                 <motion.div
                   key={q.id}
@@ -421,7 +436,9 @@ export default function LifeView() {
                           <textarea
                             autoFocus
                             value={customInputs[q.id] || ''}
-                            onChange={(e) => setCustomInputs((ci) => ({ ...ci, [q.id]: e.target.value }))}
+                            onChange={(e) =>
+                              setCustomInputs((ci) => ({ ...ci, [q.id]: e.target.value }))
+                            }
                             placeholder="写下你的想法..."
                             className="mt-2 w-full px-3 py-2 rounded-xl border border-monet-haze/30 bg-white/70 text-sm font-serif text-monet-leaf placeholder-monet-haze/40 resize-none focus:outline-none focus:border-monet-sage/50"
                             rows={3}
@@ -434,7 +451,7 @@ export default function LifeView() {
               ))}
             </div>
 
-            {/* Fixed bottom bar */}
+            {/* Fixed bottom action bar */}
             <div className="fixed bottom-0 left-0 right-0 bg-white/80 backdrop-blur border-t border-monet-haze/20 px-6 py-4 flex gap-3 justify-center z-20">
               <button
                 onClick={handleSkipAll}
@@ -461,7 +478,9 @@ export default function LifeView() {
             transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
             className="w-12 h-12 border-4 border-monet-haze/30 border-t-monet-sage rounded-full mb-6"
           />
-          <h3 className="font-serif text-lg font-medium text-monet-leaf mb-2">正在为你书写另一种人生……</h3>
+          <h3 className="font-serif text-lg font-medium text-monet-leaf mb-2">
+            正在为你书写另一种人生……
+          </h3>
           <p className="font-serif text-monet-haze text-sm max-w-md text-center">
             AI 正在根据你的性格画像和人生分岔点，想象如果当初走了另一条路，你的故事会怎样展开。
           </p>
@@ -472,7 +491,7 @@ export default function LifeView() {
       {(isStreaming || phase === 'done') && (displayBlocks.length > 0 || pendingSkeletons.length > 0) && (
         <div className="max-w-7xl mx-auto px-6 py-10">
           <div className="flex gap-8">
-            {/* Left: narrative blocks (~65%) */}
+            {/* Left: narrative blocks */}
             <div className="flex-1 min-w-0 space-y-8">
               {displayBlocks.map((block) => (
                 <motion.div
@@ -497,7 +516,6 @@ export default function LifeView() {
                 </motion.div>
               ))}
 
-              {/* Skeleton placeholders */}
               {pendingSkeletons.map((block) => (
                 <div
                   key={`skeleton-${block.index}`}
@@ -515,7 +533,7 @@ export default function LifeView() {
               ))}
             </div>
 
-            {/* Right: image placeholders (~35%) */}
+            {/* Right: image placeholders */}
             <div className="hidden lg:block w-[35%] flex-shrink-0 space-y-8">
               {displayBlocks.map((block) => (
                 <div
@@ -532,7 +550,6 @@ export default function LifeView() {
                   </div>
                 </div>
               ))}
-
               {pendingSkeletons.map((block) => (
                 <div
                   key={`img-skeleton-${block.index}`}
