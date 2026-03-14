@@ -30,7 +30,7 @@ fi
 echo "📦 启动后端 (端口 6016)..."
 cd "$PROJECT_ROOT/backend"
 source venv/bin/activate
-uvicorn app.main:app --host 0.0.0.0 --port 6016 --reload &
+uvicorn app.main:app --host 0.0.0.0 --port 6016 --reload > "$PROJECT_ROOT/backend.log" 2>&1 &
 BACKEND_PID=$!
 
 # 启动前端

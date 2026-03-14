@@ -13,18 +13,18 @@ export default function Landing() {
   }, [isAuthenticated, user, loading, navigate]);
 
   return (
-    <div className="min-h-screen bg-white flex flex-col">
+    <div className="min-h-screen bg-canvas flex flex-col bg-gradient-to-b from-[#f0eec8] via-[#e8e8dc] to-[#dde8e0]">
       {/* Hero */}
       <div className="flex-1 flex flex-col items-center justify-center px-6 text-center">
         <div className="max-w-2xl mx-auto">
-          <h1 className="text-5xl md:text-6xl font-bold tracking-tight text-gray-900 mb-6">
+          <h1 className="font-serif text-5xl md:text-6xl font-bold tracking-tight text-[#103811] mb-6">
             另一个
-            <span className="bg-gradient-to-r from-brand-500 to-brand-700 bg-clip-text text-transparent">我</span>
+            <span className="bg-gradient-to-r from-monet-sage to-monet-haze bg-clip-text text-transparent">我</span>
           </h1>
-          <p className="text-xl md:text-2xl text-gray-500 font-light mb-4">
+          <p className="font-serif text-xl md:text-2xl text-monet-haze font-light mb-4">
             与未选择的自己重逢
           </p>
-          <p className="text-base text-gray-400 max-w-lg mx-auto mb-12 leading-relaxed">
+          <p className="font-serif text-base text-monet-haze/80 max-w-lg mx-auto mb-12 leading-relaxed">
             你有没有想过，那个没考公、没回老家、没分手的自己，现在正过着怎样的人生？
             <br />
             设定一个人生分岔点，AI 帮你看见那条未走的路。
@@ -32,7 +32,7 @@ export default function Landing() {
 
           <button
             onClick={loginWithGoogle}
-            className="inline-flex items-center gap-3 bg-gray-900 text-white px-8 py-4 rounded-full text-lg font-medium hover:bg-gray-800 transition-all hover:scale-[1.02] active:scale-[0.98] shadow-lg shadow-gray-900/20"
+            className="inline-flex items-center gap-3 bg-monet-sage/90 text-white px-8 py-4 rounded-full text-lg font-medium hover:bg-monet-sage transition-all hover:scale-[1.02] active:scale-[0.98] shadow-monet hover:shadow-monet-lg"
           >
             <svg className="w-5 h-5" viewBox="0 0 24 24">
               <path fill="#4285F4" d="M22.56 12.25c0-.78-.07-1.53-.2-2.25H12v4.26h5.92a5.06 5.06 0 01-2.2 3.32v2.77h3.57c2.08-1.92 3.28-4.74 3.28-8.1z"/>
@@ -46,7 +46,7 @@ export default function Landing() {
       </div>
 
       {/* Bottom */}
-      <div className="text-center pb-8 text-sm text-gray-300">
+      <div className="text-center pb-8 text-sm text-monet-haze/70 font-serif">
         另一个我，不是用来羡慕的，是用来拥抱的。
       </div>
     </div>

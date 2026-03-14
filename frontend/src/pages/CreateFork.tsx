@@ -2,6 +2,7 @@ import { useState } from "react";
 import { useNavigate } from "react-router-dom";
 import api from "../services/api";
 import type { ApiResponse, ForkPoint } from "../types";
+import DatePickerRoller from "../components/DatePickerRoller";
 
 export default function CreateFork() {
   const navigate = useNavigate();
@@ -45,12 +46,12 @@ export default function CreateFork() {
   };
 
   return (
-    <div className="min-h-screen bg-white">
-      <header className="border-b border-gray-100">
+    <div className="min-h-screen bg-canvas bg-gradient-to-b from-[#f0eec8] via-[#e8e8dc] to-[#dde8e0]">
+      <header className="border-b border-monet-haze/20 bg-white/50">
         <div className="max-w-2xl mx-auto px-6 py-4">
           <button
             onClick={() => navigate("/dashboard")}
-            className="text-gray-400 hover:text-gray-600 transition-colors"
+            className="text-monet-haze hover:text-monet-leaf transition-colors font-serif"
           >
             ← 返回
           </button>
@@ -58,12 +59,12 @@ export default function CreateFork() {
       </header>
 
       <main className="max-w-2xl mx-auto px-6 py-10">
-        <h1 className="text-3xl font-bold text-gray-900 mb-2">创建人生分岔点</h1>
-        <p className="text-gray-400 mb-10">回忆那个改变你人生轨迹的时刻</p>
+        <h1 className="font-serif text-3xl font-bold text-monet-leaf mb-2">创建人生分岔点</h1>
+        <p className="font-serif text-monet-haze mb-10">回忆那个改变你人生轨迹的时刻</p>
 
         <div className="space-y-6">
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-monet-leaf mb-2 font-serif">
               这个分岔点叫什么？
             </label>
             <input
@@ -71,24 +72,22 @@ export default function CreateFork() {
               value={form.title}
               onChange={(e) => update("title", e.target.value)}
               placeholder="比如：25岁那年我没辞职"
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              className="w-full px-4 py-3 border border-monet-haze/40 rounded-2xl focus:outline-none focus:ring-2 focus:ring-monet-sage/50 focus:border-monet-sage bg-white/60 placeholder:text-monet-haze/50 font-serif"
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-monet-leaf mb-2 font-serif">
               大概是什么时候？
             </label>
-            <input
-              type="date"
+            <DatePickerRoller
               value={form.happened_at}
-              onChange={(e) => update("happened_at", e.target.value)}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              onChange={(v) => update("happened_at", v)}
             />
           </div>
 
           <div>
-            <label className="block text-sm font-medium text-gray-700 mb-2">
+            <label className="block text-sm font-medium text-monet-leaf mb-2 font-serif">
               当时发生了什么？（背景描述）
             </label>
             <textarea
@@ -96,14 +95,14 @@ export default function CreateFork() {
               onChange={(e) => update("description", e.target.value)}
               placeholder="描述一下当时的情况、你面临的选择..."
               rows={3}
-              className="w-full px-4 py-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+              className="w-full px-4 py-3 border border-monet-haze/40 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-monet-sage/50 focus:border-monet-sage bg-white/60 placeholder:text-monet-haze/50 font-serif"
             />
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-gray-400 mr-2" />
+              <label className="block text-sm font-medium text-monet-leaf mb-2 font-serif">
+                <span className="inline-block w-2 h-2 rounded-full bg-monet-sage mr-2" />
                 你实际做的选择
               </label>
               <textarea
@@ -111,12 +110,12 @@ export default function CreateFork() {
                 onChange={(e) => update("actual_choice", e.target.value)}
                 placeholder="比如：留在了那家公司"
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full px-4 py-3 border border-monet-sage/50 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-monet-sage/50 focus:border-monet-sage bg-white/60 placeholder:text-monet-haze/50 font-serif"
               />
             </div>
             <div>
-              <label className="block text-sm font-medium text-gray-700 mb-2">
-                <span className="inline-block w-2 h-2 rounded-full bg-brand-400 mr-2" />
+              <label className="block text-sm font-medium text-monet-lotus mb-2 font-serif">
+                <span className="inline-block w-2 h-2 rounded-full bg-monet-lotus mr-2" />
                 未走的那条路
               </label>
               <textarea
@@ -124,7 +123,7 @@ export default function CreateFork() {
                 onChange={(e) => update("alternative_choice", e.target.value)}
                 placeholder="比如：辞职去创业"
                 rows={3}
-                className="w-full px-4 py-3 border border-gray-200 rounded-xl resize-none focus:outline-none focus:ring-2 focus:ring-gray-900 focus:border-transparent"
+                className="w-full px-4 py-3 border border-monet-lotus/50 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-monet-lotus/50 focus:border-monet-lotus bg-white/60 placeholder:text-monet-haze/50 font-serif"
               />
             </div>
           </div>
@@ -137,7 +136,7 @@ export default function CreateFork() {
             <button
               onClick={handleSubmit}
               disabled={saving}
-              className="bg-gray-900 text-white px-8 py-3 rounded-full font-medium hover:bg-gray-800 disabled:opacity-40 disabled:cursor-not-allowed transition-all"
+              className="bg-monet-sage text-white px-8 py-3 rounded-full font-medium hover:bg-monet-sage/90 disabled:opacity-40 disabled:cursor-not-allowed transition-all shadow-monet font-serif"
             >
               {saving ? "创建中..." : "创建分岔点"}
             </button>
