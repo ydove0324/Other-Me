@@ -116,12 +116,29 @@ async def get_me(user: Annotated[User, Depends(get_current_user)]):
 
 # ===================== Google OAuth =====================
 
+
+@router.get("/oauth/debug-redirect-uri")
+async def oauth_debug_redirect_uri():
+    """DEBUG only: 返回当前使用的 redirect_uri，便于与 Google 控制台核对。"""
+    if not getattr(settings, "DEBUG", False):
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND)
+    return {
+        "redirect_uri": settings.GOOGLE_REDIRECT_URI,
+        "hint": "在 Google 云控制台 → 凭据 → OAuth 2.0 客户端 ID → 已获授权的重定向 URI 中，必须与此处完全一致（包括端口、无尾部斜杠）。",
+    }
+
+
 @router.get("/oauth/{provider}/authorize")
 async def oauth_authorize(provider: str):
     if provider != "google":
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"不支持的 OAuth 提供者: {provider}")
     if not settings.GOOGLE_CLIENT_ID:
         raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="Google OAuth 未配置")
+    if not settings.GOOGLE_REDIRECT_URI:
+        raise HTTPException(status_code=status.HTTP_500_INTERNAL_SERVER_ERROR, detail="GOOGLE_REDIRECT_URI 未配置")
+
+    if getattr(settings, "DEBUG", False):
+        print("[OAuth] redirect_uri sent to Google:", settings.GOOGLE_REDIRECT_URI)
 
     state = secrets.token_urlsafe(32)
     params = {

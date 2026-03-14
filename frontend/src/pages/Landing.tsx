@@ -19,7 +19,7 @@ export default function Landing() {
         <div className="max-w-2xl mx-auto">
           <h1 className="font-serif text-5xl md:text-6xl font-bold tracking-tight text-monet-leaf mb-6">
             另一个
-            <span className="bg-gradient-to-r from-monet-cobalt via-white to-monet-sage bg-clip-text text-transparent">
+            <span className="bg-gradient-to-r from-monet-cobalt to-monet-sage bg-clip-text text-transparent">
               我
             </span>
           </h1>
