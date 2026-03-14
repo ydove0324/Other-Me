@@ -113,11 +113,16 @@ export interface StoryContent {
 }
 
 export interface BlockStreamEvent {
-  type: 'block_start' | 'content' | 'block_end' | 'error';
+  type: 'block_start' | 'content' | 'block_end' | 'error' | 'image_generating' | 'image_ready' | 'images_done';
   index?: number;
   title?: string;
   text?: string;
   message?: string;
+  // image events
+  block_index?: number;
+  scene_id?: number;
+  image_url?: string;
+  count?: number;
 }
 
 export interface LifeBlock {
@@ -125,6 +130,8 @@ export interface LifeBlock {
   title: string;
   content: string;
   status: 'pending' | 'streaming' | 'completed';
+  image_url?: string;
+  image_status?: 'none' | 'generating' | 'ready';
 }
 
 export interface StoryQuestion {

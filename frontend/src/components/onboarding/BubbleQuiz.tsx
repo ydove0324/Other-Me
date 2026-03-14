@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { quizConfig } from '../../config/quizConfig';
 import BubbleQuestion from './BubbleQuestion';
+import PhotoUpload from './PhotoUpload';
 import api from '../../services/api';
 
 interface BubbleQuizProps {
@@ -9,6 +10,7 @@ interface BubbleQuizProps {
 }
 
 export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
+  const [showPhotoUpload, setShowPhotoUpload] = useState(true);
   const [currentSection, setCurrentSection] = useState(0);
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [submitting, setSubmitting] = useState(false);
@@ -92,6 +94,10 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
   };
 
   const isLastSection = currentSection === totalSections - 1;
+
+  if (showPhotoUpload) {
+    return <PhotoUpload onContinue={() => setShowPhotoUpload(false)} />;
+  }
 
   return (
     <div className="max-w-2xl mx-auto px-4">

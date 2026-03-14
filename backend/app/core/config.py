@@ -46,6 +46,18 @@ class Settings(BaseSettings):
     # --- Web Search ---
     SERPAPI_API_KEY: str = ""
 
+    # --- Aliyun OSS ---
+    OSS_ACCESS_KEY_ID: str = ""
+    OSS_ACCESS_KEY_SECRET: str = ""
+    OSS_BUCKET_NAME: str = "hx-img-oss"
+    OSS_REGION: str = "cn-beijing"
+    OSS_ENDPOINT: str = "https://oss-cn-beijing.aliyuncs.com"
+
+    # --- Image Generation ---
+    IMAGE_GEN_API_BASE: str = "https://aiping.cn/api/v1"
+    IMAGE_GEN_API_KEY: str = ""
+    IMAGE_GEN_MODEL: str = "Qwen-Image-2.0-Pro"
+
     model_config = {"env_file": ".env", "env_file_encoding": "utf-8"}
 
     @property

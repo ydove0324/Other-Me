@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import asyncio
 import json
 import logging
 from datetime import datetime, date, timezone
@@ -13,6 +14,7 @@ from app.models.fork_point import ForkPoint
 from app.models.life import AlternativeLife, LifeTimelineEvent, LifeScene
 from app.models.ai_config import GenerationTask
 from app.models.base import ForkPointStatus, LifeStatus, TaskStatus, TaskType
+from app.models.user import User
 
 from .prompt_engine import get_template, render_template
 import re as _re
@@ -758,6 +760,7 @@ async def generate_life_blocks_stream(
         life.overview = fp.title
         life.status = LifeStatus.completed
 
+        db_scenes: list[LifeScene] = []
         for pb in parsed_blocks:
             scene = LifeScene(
                 alternative_life_id=life.id,
@@ -767,12 +770,20 @@ async def generate_life_blocks_stream(
                 sort_order=pb["index"],
             )
             session.add(scene)
+            db_scenes.append(scene)
 
         fp.status = ForkPointStatus.completed
         task.status = TaskStatus.completed
         task.output_data = {"block_count": len(parsed_blocks), "total_length": len(full_text)}
         task.completed_at = datetime.now(timezone.utc)
         await session.commit()
+        # scene.id values are now populated (expire_on_commit=False)
+
+        # ── Generate story illustrations ──
+        async for img_event in _plan_and_generate_images(
+            user_id, parsed_blocks, db_scenes, session
+        ):
+            yield img_event
 
     except BaseException as e:
         # BaseException catches CancelledError (client disconnect) in addition to
@@ -784,3 +795,116 @@ async def generate_life_blocks_stream(
         task.completed_at = datetime.now(timezone.utc)
         await session.commit()
         raise
+
+
+async def _plan_and_generate_images(
+    user_id: int,
+    parsed_blocks: list[dict],
+    db_scenes: list[LifeScene],
+    session: AsyncSession,
+):
+    """Plan image prompts via LLM, concurrently generate + upload to OSS, update LifeScene.media_url.
+
+    Yields SSE-compatible dicts:
+      {"type": "image_generating", "count": N}
+      {"type": "image_ready", "block_index": N, "scene_id": N, "image_url": "..."}
+      {"type": "images_done"}
+
+    Errors are logged and swallowed — illustrations are optional.
+    """
+    if not parsed_blocks or not db_scenes:
+        return
+
+    from app.services.image_gen_service import generate_image
+    from app.services.oss_service import upload_from_url, new_key
+
+    # Fetch user's comic avatar URL (used as reference image for character consistency)
+    user_result = await session.execute(select(User).where(User.id == user_id))
+    user = user_result.scalar_one_or_none()
+    comic_avatar_url: str | None = user.comic_avatar_url if user else None
+
+    # ── Step 1: Ask LLM to plan image prompts ──
+    blocks_summary = "\n".join(
+        f"Block {pb['index']}: {pb['title']}\n{pb['content'][:300]}..."
+        for pb in parsed_blocks
+    )
+    plan_prompt = (
+        f"You are a visual art director for a narrative story. "
+        f"The story has {len(parsed_blocks)} chapters listed below.\n\n"
+        f"{blocks_summary}\n\n"
+        f"Design one illustration prompt per chapter. Requirements:\n"
+        f"- Write prompts in English for best image quality\n"
+        f"- Style: warm, delicate storybook illustration, soft watercolor tones\n"
+        f"- Each prompt: describe scene, atmosphere, character's action/emotion, lighting\n"
+        f"- Make prompts coherent across chapters (same character, consistent world)\n"
+        f"- If a reference character image is provided, mention 'the same character'\n\n"
+        f"Reply in JSON: {{\"image_plans\": ["
+        f"{{\"block_index\": 1, \"prompt\": \"...\"}}, ...]}}"
+    )
+
+    try:
+        plan_data, _ = await call_llm_json(
+            [
+                {"role": "system", "content": "You are a visual art director. Reply in JSON."},
+                {"role": "user", "content": plan_prompt},
+            ],
+            temperature=0.7,
+        )
+        image_plans: list[dict] = plan_data.get("image_plans", [])
+    except Exception as e:
+        logger.error(f"Image planning LLM call failed: {e}")
+        return
+
+    if not image_plans:
+        return
+
+    yield {"type": "image_generating", "count": len(image_plans)}
+
+    # Build a map: block_index → scene
+    scene_by_index: dict[int, LifeScene] = {s.sort_order: s for s in db_scenes}
+
+    # ── Step 2: Concurrently generate + upload images ──
+    async def _gen_one(plan: dict) -> dict | None:
+        block_index = plan.get("block_index")
+        prompt = plan.get("prompt", "")
+        if not prompt or block_index is None:
+            return None
+        scene = scene_by_index.get(block_index)
+        if scene is None:
+            return None
+        try:
+            # Use comic avatar as reference if available → character-consistent image editing
+            # If no avatar → pure text-to-image generation
+            img_url = await generate_image(
+                prompt=prompt,
+                reference_image_url=comic_avatar_url,
+            )
+            oss_key = new_key(f"story-images/{user_id}")
+            oss_url = await upload_from_url(img_url, oss_key)
+            return {"block_index": block_index, "scene_id": scene.id, "image_url": oss_url}
+        except Exception as e:
+            logger.error(f"Image generation failed for block {block_index}: {e}")
+            return None
+
+    results = await asyncio.gather(*[_gen_one(p) for p in image_plans])
+
+    # ── Step 3: Persist image URLs and yield events ──
+    for res in results:
+        if res is None:
+            continue
+        scene = scene_by_index.get(res["block_index"])
+        if scene:
+            scene.media_url = res["image_url"]
+        yield {
+            "type": "image_ready",
+            "block_index": res["block_index"],
+            "scene_id": res["scene_id"],
+            "image_url": res["image_url"],
+        }
+
+    try:
+        await session.commit()
+    except Exception as e:
+        logger.error(f"Failed to persist image URLs: {e}")
+
+    yield {"type": "images_done"}

@@ -95,6 +95,8 @@ export default function LifeView() {
             title: s.title || `第${s.sort_order}章`,
             content: s.content || '',
             status: 'completed' as const,
+            image_url: s.media_url ?? undefined,
+            image_status: s.media_url ? ('ready' as const) : ('none' as const),
           }))
         );
         return true;
@@ -223,6 +225,25 @@ export default function LifeView() {
             if (evt.type === 'block_end' && evt.index !== undefined) {
               setBlocks((prev) =>
                 prev.map((b) => (b.index === evt.index ? { ...b, status: 'completed' } : b))
+              );
+            }
+
+            if (evt.type === 'image_generating') {
+              // Mark all completed blocks as "generating" so the right column shows a spinner
+              setBlocks((prev) =>
+                prev.map((b) =>
+                  b.status === 'completed' ? { ...b, image_status: 'generating' as const } : b
+                )
+              );
+            }
+
+            if (evt.type === 'image_ready' && evt.block_index !== undefined && evt.image_url) {
+              setBlocks((prev) =>
+                prev.map((b) =>
+                  b.index === evt.block_index
+                    ? { ...b, image_url: evt.image_url, image_status: 'ready' as const }
+                    : b
+                )
               );
             }
           } catch (parseErr) {
@@ -544,21 +565,44 @@ export default function LifeView() {
               ))}
             </div>
 
-            {/* Right: image placeholders */}
+            {/* Right: story illustrations */}
             <div className="hidden lg:block w-[35%] flex-shrink-0 space-y-8">
               {displayBlocks.map((block) => (
                 <div
                   key={`img-${block.index}`}
-                  className="bg-white/40 rounded-2xl border border-monet-haze/10 aspect-[4/3] flex items-center justify-center"
+                  className="rounded-2xl border border-monet-haze/10 aspect-[4/3] overflow-hidden"
                 >
-                  <div className="text-center">
-                    <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-monet-haze/10 flex items-center justify-center">
-                      <svg className="w-6 h-6 text-monet-haze/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
-                      </svg>
+                  {block.image_status === 'ready' && block.image_url ? (
+                    <motion.img
+                      key={block.image_url}
+                      src={block.image_url}
+                      alt={block.title}
+                      initial={{ opacity: 0, scale: 1.04 }}
+                      animate={{ opacity: 1, scale: 1 }}
+                      transition={{ duration: 0.6 }}
+                      className="w-full h-full object-cover"
+                    />
+                  ) : block.image_status === 'generating' ? (
+                    <div className="w-full h-full bg-white/40 flex flex-col items-center justify-center gap-3">
+                      <motion.div
+                        animate={{ rotate: 360 }}
+                        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                        className="w-8 h-8 border-2 border-monet-haze/30 border-t-monet-sage rounded-full"
+                      />
+                      <p className="text-xs text-monet-haze/60 font-serif">插图生成中…</p>
                     </div>
-                    <p className="text-sm text-monet-haze/50 font-serif">等待生成</p>
-                  </div>
+                  ) : (
+                    <div className="w-full h-full bg-white/40 flex items-center justify-center">
+                      <div className="text-center">
+                        <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-monet-haze/10 flex items-center justify-center">
+                          <svg className="w-6 h-6 text-monet-haze/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                          </svg>
+                        </div>
+                        <p className="text-sm text-monet-haze/50 font-serif">等待生成</p>
+                      </div>
+                    </div>
+                  )}
                 </div>
               ))}
               {pendingSkeletons.map((block) => (
