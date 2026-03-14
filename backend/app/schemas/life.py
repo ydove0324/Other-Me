@@ -46,5 +46,15 @@ class StoryResponse(BaseModel):
     scenes: list[SceneResponse] = []
 
 
+class LifeBlocksResponse(BaseModel):
+    id: int
+    fork_point_id: int
+    overview: str | None = None
+    status: str
+    content_type: str = "blocks"
+    created_at: datetime
+    blocks: list[SceneResponse] = []
+
+
 class GenerateLifeRequest(BaseModel):
     pass

@@ -111,3 +111,28 @@ export interface StoryContent {
   created_at: string;
   scenes: StoryScene[];
 }
+
+export interface BlockStreamEvent {
+  type: 'block_start' | 'content' | 'block_end' | 'error';
+  index?: number;
+  title?: string;
+  text?: string;
+  message?: string;
+}
+
+export interface LifeBlock {
+  index: number;
+  title: string;
+  content: string;
+  status: 'pending' | 'streaming' | 'completed';
+}
+
+export interface LifeBlocksData {
+  id: number;
+  fork_point_id: number;
+  overview: string | null;
+  status: 'generating' | 'completed' | 'failed';
+  content_type: string;
+  created_at: string;
+  blocks: StoryScene[];
+}

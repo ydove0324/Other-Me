@@ -7,7 +7,6 @@ import Onboarding from "./pages/Onboarding";
 import Dashboard from "./pages/Dashboard";
 import CreateFork from "./pages/CreateFork";
 import LifeView from "./pages/LifeView";
-import StoryView from "./pages/StoryView";
 import Profile from "./pages/Profile";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
@@ -68,14 +67,6 @@ export default function App() {
         element={
           <ProtectedRoute>
             <LifeView />
-          </ProtectedRoute>
-        }
-      />
-      <Route
-        path="/story/:forkPointId"
-        element={
-          <ProtectedRoute>
-            <StoryView />
           </ProtectedRoute>
         }
       />

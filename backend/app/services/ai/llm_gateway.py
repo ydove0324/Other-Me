@@ -115,21 +115,29 @@ async def call_llm_stream(
     model: str | None = None,
     temperature: float = 0.8,
     max_tokens: int = 4096,
+    reasoning_split: bool | None = None,
 ) -> AsyncIterator[str]:
     """
     Streaming version of call_llm. Yields text chunks as they arrive.
+    When reasoning_split is enabled, only content chunks are yielded (reasoning is skipped).
     Usage: async for chunk in call_llm_stream(...): ...
     """
     client = get_openai_client()
     model = model or settings.AI_DEFAULT_MODEL
 
-    stream = await client.chat.completions.create(
-        model=model,
-        messages=messages,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        stream=True,
-    )
+    kwargs: dict[str, Any] = {
+        "model": model,
+        "messages": messages,
+        "temperature": temperature,
+        "max_tokens": max_tokens,
+        "stream": True,
+    }
+
+    use_reasoning = reasoning_split if reasoning_split is not None else settings.AI_REASONING_SPLIT
+    if use_reasoning:
+        kwargs["extra_body"] = {"reasoning_split": True}
+
+    stream = await client.chat.completions.create(**kwargs)
 
     async for chunk in stream:
         if chunk.choices and chunk.choices[0].delta.content:

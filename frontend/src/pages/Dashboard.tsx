@@ -119,7 +119,7 @@ export default function Dashboard() {
               return (
                 <div
                   key={fp.id}
-                  onClick={() => navigate(`/story/${fp.id}`)}
+                  onClick={() => navigate(`/life/${fp.id}`)}
                   className="bg-white/80 border border-monet-haze/20 rounded-2xl p-6 hover:shadow-monet hover:border-monet-sage/40 transition-all cursor-pointer group"
                 >
                   <div className="flex items-start justify-between">

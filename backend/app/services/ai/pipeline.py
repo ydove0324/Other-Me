@@ -15,6 +15,8 @@ from app.models.ai_config import GenerationTask
 from app.models.base import ForkPointStatus, LifeStatus, TaskStatus, TaskType
 
 from .prompt_engine import get_template, render_template
+import re as _re
+
 from .llm_gateway import call_llm, call_llm_json, call_llm_stream, extract_content, extract_usage
 
 logger = logging.getLogger(__name__)
@@ -552,6 +554,183 @@ async def generate_story_stream(
         fp.status = ForkPointStatus.completed
         task.status = TaskStatus.completed
         task.output_data = {"story_length": len(full_text), "story_title": story_title}
+        task.completed_at = datetime.now(timezone.utc)
+        await session.commit()
+
+    except Exception as e:
+        life.status = LifeStatus.failed
+        fp.status = ForkPointStatus.failed
+        task.status = TaskStatus.failed
+        task.error_message = str(e)
+        task.completed_at = datetime.now(timezone.utc)
+        await session.commit()
+        raise
+
+
+async def generate_life_blocks_stream(
+    user_id: int,
+    fork_point_id: int,
+    session: AsyncSession,
+):
+    """Stream life blocks, yielding structured SSE events.
+
+    Events yielded (as dicts):
+      {"type": "block_start", "index": n, "title": "..."}
+      {"type": "content", "index": n, "text": "..."}
+      {"type": "block_end", "index": n}
+    """
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise ValueError("Fork point not found")
+
+    fp.status = ForkPointStatus.generating
+    await session.flush()
+
+    persona = await _get_latest_persona(user_id, session)
+    persona_text = persona.persona_summary if persona else "（用户尚未生成画像）"
+
+    quiz_answers_text = "（未提供）"
+    if persona and persona.raw_input_data:
+        qa = persona.raw_input_data.get("quiz_answers")
+        if qa:
+            quiz_answers_text = "\n".join(
+                f"- {k}: {v if isinstance(v, str) else ', '.join(v)}"
+                for k, v in qa.items()
+            )
+
+    template = await get_template("life_blocks", session)
+    prompt = render_template(template, {
+        "persona": persona_text,
+        "fork_date": str(fp.happened_at) if fp.happened_at else "不确定",
+        "fork_title": fp.title,
+        "fork_description": fp.description or "",
+        "actual_choice": fp.actual_choice,
+        "alternative_choice": fp.alternative_choice,
+        "quiz_answers": quiz_answers_text,
+        "current_year": str(datetime.now().year),
+    })
+
+    life = AlternativeLife(
+        fork_point_id=fork_point_id,
+        user_id=user_id,
+        persona_snapshot_id=persona.id if persona else None,
+        status=LifeStatus.generating,
+        content_type="blocks",
+    )
+    session.add(life)
+    await session.flush()
+
+    task = GenerationTask(
+        user_id=user_id,
+        task_type=TaskType.story_generation,
+        related_id=life.id,
+        status=TaskStatus.processing,
+        started_at=datetime.now(timezone.utc),
+    )
+    session.add(task)
+    await session.flush()
+    await session.commit()
+
+    full_text = ""
+    buffer = ""
+    current_block_index = 0
+    current_block_title = ""
+    block_started = False
+
+    _BLOCK_MARKER = _re.compile(r"<!--\s*BLOCK\s+(\d+)\s*-->")
+    _HEADING = _re.compile(r"^##\s+(.+)$", _re.MULTILINE)
+
+    try:
+        async for chunk in call_llm_stream(
+            [
+                {"role": "system", "content": "你是一位才华横溢的叙事作家。请用 Markdown 格式写故事，用 <!-- BLOCK n --> 分隔章节。"},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.9,
+            max_tokens=12288,
+            reasoning_split=True,
+        ):
+            full_text += chunk
+            buffer += chunk
+
+            # Try to detect block markers in buffer
+            while True:
+                marker_match = _BLOCK_MARKER.search(buffer)
+                if not marker_match:
+                    # No marker found; emit buffered content (keep tail for partial marker)
+                    safe_len = len(buffer) - 20  # keep last 20 chars for partial "<!-- BLOCK"
+                    if safe_len > 0 and block_started:
+                        emit_text = buffer[:safe_len]
+                        buffer = buffer[safe_len:]
+                        if emit_text:
+                            yield {"type": "content", "index": current_block_index, "text": emit_text}
+                    break
+
+                # Found a marker
+                before_marker = buffer[:marker_match.start()]
+                after_marker = buffer[marker_match.end():]
+                new_index = int(marker_match.group(1))
+
+                # Emit remaining content of previous block
+                if block_started and before_marker.strip():
+                    yield {"type": "content", "index": current_block_index, "text": before_marker}
+
+                # End previous block
+                if block_started:
+                    yield {"type": "block_end", "index": current_block_index}
+
+                current_block_index = new_index
+                current_block_title = ""
+                block_started = True
+                buffer = after_marker
+
+                # Try to extract heading from the beginning of after_marker
+                heading_match = _HEADING.search(buffer)
+                if heading_match and heading_match.start() < 100:
+                    current_block_title = heading_match.group(1).strip()
+
+                yield {"type": "block_start", "index": current_block_index, "title": current_block_title}
+
+        # Flush remaining buffer
+        if buffer.strip() and block_started:
+            yield {"type": "content", "index": current_block_index, "text": buffer}
+
+        if block_started:
+            yield {"type": "block_end", "index": current_block_index}
+
+        # ── Parse full_text into blocks for DB persistence ──
+        parts = _BLOCK_MARKER.split(full_text)
+        # parts: [preamble, "1", content1, "2", content2, ...]
+        parsed_blocks: list[dict] = []
+        for i in range(1, len(parts), 2):
+            block_idx = int(parts[i])
+            block_content = parts[i + 1] if i + 1 < len(parts) else ""
+            block_title_match = _HEADING.search(block_content[:200])
+            title = block_title_match.group(1).strip() if block_title_match else f"第{block_idx}章"
+            parsed_blocks.append({"index": block_idx, "title": title, "content": block_content.strip()})
+
+        # Save to DB
+        life.story_markdown = full_text
+        life.story_title = parsed_blocks[0]["title"] if parsed_blocks else fp.title
+        life.overview = fp.title
+        life.status = LifeStatus.completed
+
+        for pb in parsed_blocks:
+            scene = LifeScene(
+                alternative_life_id=life.id,
+                scene_type="text",
+                title=pb["title"],
+                content=pb["content"],
+                sort_order=pb["index"],
+            )
+            session.add(scene)
+
+        fp.status = ForkPointStatus.completed
+        task.status = TaskStatus.completed
+        task.output_data = {"block_count": len(parsed_blocks), "total_length": len(full_text)}
         task.completed_at = datetime.now(timezone.utc)
         await session.commit()
 

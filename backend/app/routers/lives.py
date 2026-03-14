@@ -15,7 +15,7 @@ from app.models.fork_point import ForkPoint
 from app.models.life import AlternativeLife, LifeTimelineEvent, LifeScene
 from app.models.base import ForkPointStatus, LifeStatus
 from app.schemas.common import ApiResponse
-from app.schemas.life import AlternativeLifeResponse, TimelineEventResponse, StoryResponse, SceneResponse
+from app.schemas.life import AlternativeLifeResponse, TimelineEventResponse, StoryResponse, SceneResponse, LifeBlocksResponse
 from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/api/v1", tags=["lives"])
@@ -253,6 +253,93 @@ async def get_story(
         content_type=life.content_type,
         created_at=life.created_at,
         scenes=[
+            SceneResponse(
+                id=s.id,
+                scene_type=s.scene_type,
+                title=s.title,
+                content=s.content,
+                media_url=s.media_url,
+                metadata=s.metadata_,
+                sort_order=s.sort_order,
+            )
+            for s in sorted(life.scenes, key=lambda s: s.sort_order)
+        ],
+    ).model_dump(mode="json"))
+
+
+@router.post("/fork-points/{fork_point_id}/generate-life-stream")
+async def generate_life_stream_endpoint(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """SSE endpoint: streams life blocks as they are generated."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    if fp.status == ForkPointStatus.generating:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="正在生成中，请稍候")
+
+    from app.services.ai.pipeline import generate_life_blocks_stream
+
+    async def event_generator():
+        try:
+            async for event in generate_life_blocks_stream(user.id, fork_point_id, session):
+                yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
+
+
+@router.get("/fork-points/{fork_point_id}/blocks", response_model=ApiResponse)
+async def get_life_blocks(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Get generated life blocks for a fork point."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    result = await session.execute(
+        select(AlternativeLife)
+        .where(
+            AlternativeLife.fork_point_id == fork_point_id,
+            AlternativeLife.content_type == "blocks",
+        )
+        .options(selectinload(AlternativeLife.scenes))
+        .order_by(AlternativeLife.created_at.desc())
+        .limit(1)
+    )
+    life = result.scalar_one_or_none()
+    if not life:
+        return ApiResponse(data=None, message="尚未生成")
+
+    return ApiResponse(data=LifeBlocksResponse(
+        id=life.id,
+        fork_point_id=life.fork_point_id,
+        overview=life.overview,
+        status=life.status.value,
+        content_type=life.content_type,
+        created_at=life.created_at,
+        blocks=[
             SceneResponse(
                 id=s.id,
                 scene_type=s.scene_type,
