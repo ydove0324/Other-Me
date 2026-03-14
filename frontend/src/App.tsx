@@ -8,14 +8,15 @@ import Dashboard from "./pages/Dashboard";
 import CreateFork from "./pages/CreateFork";
 import LifeView from "./pages/LifeView";
 import StoryView from "./pages/StoryView";
+import Profile from "./pages/Profile";
 
 function ProtectedRoute({ children }: { children: React.ReactNode }) {
   const { isAuthenticated, loading } = useAuthStore();
 
   if (loading) {
     return (
-      <div className="min-h-screen flex items-center justify-center">
-        <div className="animate-spin rounded-full h-8 w-8 border-2 border-gray-300 border-t-gray-900" />
+      <div className="min-h-screen flex items-center justify-center bg-canvas">
+        <div className="animate-spin rounded-full h-8 w-8 border-2 border-monet-haze/30 border-t-monet-sage" />
       </div>
     );
   }
@@ -75,6 +76,14 @@ export default function App() {
         element={
           <ProtectedRoute>
             <StoryView />
+          </ProtectedRoute>
+        }
+      />
+      <Route
+        path="/profile"
+        element={
+          <ProtectedRoute>
+            <Profile />
           </ProtectedRoute>
         }
       />

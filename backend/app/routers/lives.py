@@ -1,8 +1,10 @@
 from __future__ import annotations
 
+import json
 from typing import Annotated
 
 from fastapi import APIRouter, Depends, HTTPException, status
+from fastapi.responses import StreamingResponse
 from sqlalchemy import select
 from sqlalchemy.ext.asyncio import AsyncSession
 from sqlalchemy.orm import selectinload
@@ -172,6 +174,43 @@ async def generate_story(
         content_type=life.content_type,
         created_at=life.created_at,
     ).model_dump(mode="json"))
+
+
+@router.post("/fork-points/{fork_point_id}/generate-story-stream")
+async def generate_story_stream_endpoint(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """SSE endpoint: streams the story as it is generated, then saves to DB."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    if fp.status == ForkPointStatus.generating:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="正在生成中，请稍候")
+
+    from app.services.ai.pipeline import generate_story_stream as gen_stream
+
+    async def event_generator():
+        try:
+            async for chunk in gen_stream(user.id, fork_point_id, session):
+                yield f"data: {json.dumps(chunk, ensure_ascii=False)}\n\n"
+        except Exception as e:
+            yield f"data: {json.dumps({'error': str(e)}, ensure_ascii=False)}\n\n"
+        yield "data: [DONE]\n\n"
+
+    return StreamingResponse(
+        event_generator(),
+        media_type="text/event-stream",
+        headers={
+            "Cache-Control": "no-cache",
+            "X-Accel-Buffering": "no",
+        },
+    )
 
 
 @router.get("/fork-points/{fork_point_id}/story", response_model=ApiResponse)

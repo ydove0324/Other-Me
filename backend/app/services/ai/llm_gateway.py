@@ -2,7 +2,7 @@ from __future__ import annotations
 
 import json
 import logging
-from typing import Any
+from typing import Any, AsyncIterator
 
 from openai import AsyncOpenAI
 
@@ -107,6 +107,33 @@ def extract_reasoning(response: dict) -> str | None:
 def extract_usage(response: dict) -> dict:
     """Extract token usage info."""
     return response.get("usage", {})
+
+
+async def call_llm_stream(
+    messages: list[dict[str, str]],
+    *,
+    model: str | None = None,
+    temperature: float = 0.8,
+    max_tokens: int = 4096,
+) -> AsyncIterator[str]:
+    """
+    Streaming version of call_llm. Yields text chunks as they arrive.
+    Usage: async for chunk in call_llm_stream(...): ...
+    """
+    client = get_openai_client()
+    model = model or settings.AI_DEFAULT_MODEL
+
+    stream = await client.chat.completions.create(
+        model=model,
+        messages=messages,
+        temperature=temperature,
+        max_tokens=max_tokens,
+        stream=True,
+    )
+
+    async for chunk in stream:
+        if chunk.choices and chunk.choices[0].delta.content:
+            yield chunk.choices[0].delta.content
 
 
 async def call_llm_json(

@@ -11,7 +11,7 @@ from app.database import get_session
 from app.models.user import User
 from app.models.fork_point import ForkPoint
 from app.models.life import AlternativeLife
-from app.models.base import ForkPointStatus
+from app.models.base import ForkPointStatus, LifeStatus
 from app.schemas.common import ApiResponse
 from app.schemas.fork_point import (
     CreateForkPointRequest,
@@ -68,6 +68,20 @@ async def list_fork_points(
     )
     fps = result.scalars().all()
 
+    # Fetch completed lives in one query to determine has_timeline / has_story
+    fp_ids = [fp.id for fp in fps]
+    lives_map: dict[int, set[str]] = {fp.id: set() for fp in fps}
+    if fp_ids:
+        lives_result = await session.execute(
+            select(AlternativeLife.fork_point_id, AlternativeLife.content_type)
+            .where(
+                AlternativeLife.fork_point_id.in_(fp_ids),
+                AlternativeLife.status == LifeStatus.completed,
+            )
+        )
+        for fork_point_id, content_type in lives_result.all():
+            lives_map[fork_point_id].add(content_type or "timeline")
+
     return ApiResponse(data=[
         ForkPointResponse(
             id=fp.id,
@@ -79,6 +93,8 @@ async def list_fork_points(
             emotional_context=fp.emotional_context,
             status=fp.status.value,
             created_at=fp.created_at,
+            has_timeline="timeline" in lives_map[fp.id],
+            has_story="story" in lives_map[fp.id],
         ).model_dump(mode="json")
         for fp in fps
     ])

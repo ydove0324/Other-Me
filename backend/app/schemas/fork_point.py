@@ -24,6 +24,8 @@ class ForkPointResponse(BaseModel):
     emotional_context: dict | None = None
     status: str
     created_at: datetime
+    has_timeline: bool = False
+    has_story: bool = False
 
 
 class UpdateForkPointRequest(BaseModel):

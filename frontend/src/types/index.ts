@@ -63,6 +63,8 @@ export interface ForkPoint {
   emotional_context: Record<string, unknown> | null;
   status: 'draft' | 'generating' | 'completed' | 'failed';
   created_at: string;
+  has_timeline: boolean;
+  has_story: boolean;
 }
 
 export interface TimelineEvent {

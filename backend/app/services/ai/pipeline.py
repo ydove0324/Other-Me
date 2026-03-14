@@ -15,7 +15,7 @@ from app.models.ai_config import GenerationTask
 from app.models.base import ForkPointStatus, LifeStatus, TaskStatus, TaskType
 
 from .prompt_engine import get_template, render_template
-from .llm_gateway import call_llm, call_llm_json, extract_content, extract_usage
+from .llm_gateway import call_llm, call_llm_json, call_llm_stream, extract_content, extract_usage
 
 logger = logging.getLogger(__name__)
 
@@ -440,6 +440,120 @@ async def generate_story(
         await session.commit()
         await session.refresh(life)
         return life
+
+    except Exception as e:
+        life.status = LifeStatus.failed
+        fp.status = ForkPointStatus.failed
+        task.status = TaskStatus.failed
+        task.error_message = str(e)
+        task.completed_at = datetime.now(timezone.utc)
+        await session.commit()
+        raise
+
+
+async def generate_story_stream(
+    user_id: int,
+    fork_point_id: int,
+    session: AsyncSession,
+):
+    """Stream a Markdown story, saving to DB when generation completes.
+
+    Yields str text chunks. On error, raises after updating DB status.
+    """
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise ValueError("Fork point not found")
+
+    fp.status = ForkPointStatus.generating
+    await session.flush()
+
+    persona = await _get_latest_persona(user_id, session)
+    persona_text = persona.persona_summary if persona else "（用户尚未生成画像）"
+
+    quiz_answers_text = "（未提供）"
+    if persona and persona.raw_input_data:
+        qa = persona.raw_input_data.get("quiz_answers")
+        if qa:
+            quiz_answers_text = "\n".join(
+                f"- {k}: {v if isinstance(v, str) else ', '.join(v)}"
+                for k, v in qa.items()
+            )
+
+    template = await get_template("story_generation", session)
+    prompt = render_template(template, {
+        "persona": persona_text,
+        "fork_date": str(fp.happened_at) if fp.happened_at else "不确定",
+        "fork_title": fp.title,
+        "fork_description": fp.description or "",
+        "actual_choice": fp.actual_choice,
+        "alternative_choice": fp.alternative_choice,
+        "quiz_answers": quiz_answers_text,
+        "current_year": str(datetime.now().year),
+    })
+
+    life = AlternativeLife(
+        fork_point_id=fork_point_id,
+        user_id=user_id,
+        persona_snapshot_id=persona.id if persona else None,
+        status=LifeStatus.generating,
+        content_type="story",
+    )
+    session.add(life)
+    await session.flush()
+
+    task = GenerationTask(
+        user_id=user_id,
+        task_type=TaskType.story_generation,
+        related_id=life.id,
+        status=TaskStatus.processing,
+        started_at=datetime.now(timezone.utc),
+    )
+    session.add(task)
+    await session.flush()
+    await session.commit()
+
+    full_text = ""
+    try:
+        async for chunk in call_llm_stream(
+            [
+                {"role": "system", "content": "你是一位才华横溢的叙事作家。请用 Markdown 格式写一篇感人的人生故事。"},
+                {"role": "user", "content": prompt},
+            ],
+            temperature=0.9,
+            max_tokens=8192,
+        ):
+            full_text += chunk
+            yield chunk
+
+        story_title = None
+        for line in full_text.split("\n"):
+            line = line.strip()
+            if line.startswith("# "):
+                story_title = line[2:].strip()
+                break
+
+        life.story_markdown = full_text
+        life.story_title = story_title or fp.title
+        life.overview = story_title or fp.title
+        life.status = LifeStatus.completed
+
+        scene = LifeScene(
+            alternative_life_id=life.id,
+            scene_type="text",
+            title=story_title or fp.title,
+            content=full_text,
+            sort_order=0,
+        )
+        session.add(scene)
+
+        fp.status = ForkPointStatus.completed
+        task.status = TaskStatus.completed
+        task.output_data = {"story_length": len(full_text), "story_title": story_title}
+        task.completed_at = datetime.now(timezone.utc)
+        await session.commit()
 
     except Exception as e:
         life.status = LifeStatus.failed
