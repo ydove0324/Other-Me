@@ -43,6 +43,11 @@ export default function LifeView() {
   const abortRef = useRef<AbortController | null>(null);
   const blockRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const thinkingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
+  // Monotonically-increasing id for each loadQuestionsAndShow invocation.
+  // Incrementing it before startStream ensures stale async callbacks
+  // (e.g. from React StrictMode double-invocation) won't call setPhase('asking')
+  // after the user has already moved past the asking phase.
+  const loadIdRef = useRef(0);
 
   // Resolve message list for current thinking phase
   const thinkingMessages =
@@ -100,8 +105,10 @@ export default function LifeView() {
     return false;
   }, [forkPointId]);
 
-  // Fetch questions then show asking phase (min 2.5s thinking animation)
+  // Fetch questions then show asking phase (min 2.5s thinking animation).
+  // Uses loadIdRef to discard results from stale/superseded invocations.
   const loadQuestionsAndShow = useCallback(async () => {
+    const myId = ++loadIdRef.current;
     setPhase('thinking_q');
     setSelectedAnswers({});
     setCustomInputs({});
@@ -112,10 +119,12 @@ export default function LifeView() {
         api.get<ApiResponse<{ questions: StoryQuestion[] }>>(`/fork-points/${forkPointId}/story-questions`),
         new Promise<void>((resolve) => setTimeout(resolve, 2500)),
       ]);
+      // Drop result if a newer invocation (or user submit) has taken over
+      if (loadIdRef.current !== myId) return;
       setQuestions(res.data.data?.questions ?? []);
       setPhase('asking');
     } catch {
-      // On question-load failure, skip straight to generating
+      if (loadIdRef.current !== myId) return;
       setPhase('thinking_g');
       startStream([]);
     }
@@ -251,9 +260,10 @@ export default function LifeView() {
       })
       .filter(Boolean) as UserAnswer[];
 
-  // User submits answers → set thinking_g immediately → fire stream request
-  // (no artificial delay — thinking_g animation runs until first LLM token)
+  // User submits answers → invalidate any pending loadQuestionsAndShow,
+  // then switch to thinking_g and fire the stream immediately.
   const handleSubmitAnswers = useCallback(() => {
+    ++loadIdRef.current; // invalidate stale load callbacks
     const answers = buildAnswers();
     setPhase('thinking_g');
     startStream(answers);
@@ -261,6 +271,7 @@ export default function LifeView() {
   }, [buildAnswers, startStream]);
 
   const handleSkipAll = useCallback(() => {
+    ++loadIdRef.current; // same guard
     setPhase('thinking_g');
     startStream([]);
   }, [startStream]);
