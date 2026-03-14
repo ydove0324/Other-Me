@@ -42,17 +42,11 @@ export const quizConfig: QuizSection[] = [
         type: 'single',
         required: true,
         options: [
-<<<<<<< Updated upstream
-          { id: 'introvert', label: '安静观察，享受独处' },
-          { id: 'extrovert', label: '活跃社交，人群中充电' },
-          { id: 'ambivert', label: '看心情，两者之间切换' },
-=======
           { id: 'studying', label: '还在读书' },
           { id: 'new_job', label: '刚工作不久' },
           { id: 'working_years', label: '工作几年了' },
           { id: 'transition', label: '过渡期（考研/考公/待业/转行）' },
           { id: 'life_stage_other', label: '其他', isCustomInput: true },
->>>>>>> Stashed changes
         ],
       },
       {
@@ -61,18 +55,11 @@ export const quizConfig: QuizSection[] = [
         type: 'single',
         required: true,
         options: [
-<<<<<<< Updated upstream
-          { id: 'rational', label: '理性分析利弊' },
-          { id: 'intuition', label: '跟着直觉走' },
-          { id: 'others', label: '听听身边人的建议' },
-          { id: 'mixed', label: '分析 + 直觉，看情况' },
-=======
           { id: 'tier1', label: '一线/新一线' },
           { id: 'tier2', label: '二线省会' },
           { id: 'tier34', label: '三四线小城' },
           { id: 'hometown', label: '老家/县城' },
           { id: 'overseas', label: '不在国内' },
->>>>>>> Stashed changes
         ],
       },
       {
@@ -81,18 +68,6 @@ export const quizConfig: QuizSection[] = [
         type: 'single',
         required: true,
         options: [
-<<<<<<< Updated upstream
-          { id: 'adventurous', label: '爱冒险' },
-          { id: 'cautious', label: '谨慎稳重' },
-          { id: 'creative', label: '有创造力' },
-          { id: 'empathetic', label: '共情力强' },
-          { id: 'ambitious', label: '有野心' },
-          { id: 'easygoing', label: '随遇而安' },
-          { id: 'perfectionist', label: '追求完美' },
-          { id: 'independent', label: '独立自主' },
-          { id: 'romantic', label: '浪漫主义' },
-          { id: 'practical', label: '务实接地气' },
-=======
           { id: 'alone', label: '独居' },
           { id: 'with_family', label: '和家人住' },
           { id: 'with_partner', label: '和伴侣住' },
@@ -113,7 +88,6 @@ export const quizConfig: QuizSection[] = [
               },
             ],
           },
->>>>>>> Stashed changes
         ],
       },
     ],
@@ -126,28 +100,9 @@ export const quizConfig: QuizSection[] = [
     subtitle: '你心里最牵挂谁？',
     questions: [
       {
-<<<<<<< Updated upstream
-        id: 'life_priority',
-        title: '如果只能选一个，你最看重……',
-        type: 'single',
-        required: true,
-        options: [
-          { id: 'freedom', label: '自由' },
-          { id: 'stability', label: '稳定' },
-          { id: 'love', label: '爱与被爱' },
-          { id: 'achievement', label: '成就感' },
-          { id: 'growth', label: '成长与体验' },
-        ],
-      },
-      {
-        id: 'career_attitude',
-        title: '工作对你来说意味着……',
-        type: 'single',
-=======
         id: 'care_about',
         title: '你最牵挂谁？（可选 1-2 个）',
         type: 'multi',
->>>>>>> Stashed changes
         required: true,
         minSelections: 1,
         maxSelections: 2,
@@ -257,22 +212,6 @@ export const quizConfig: QuizSection[] = [
               },
             ],
           },
-<<<<<<< Updated upstream
-          { id: 'livelihood', label: '养家糊口的工具' },
-          { id: 'identity', label: '身份认同的来源' },
-          { id: 'social', label: '社交和归属感' },
-        ],
-      },
-      {
-        id: 'relationship_style',
-        title: '在感情中，你更偏向……',
-        type: 'single',
-        options: [
-          { id: 'deep_bond', label: '深度连接，一生一人' },
-          { id: 'free_spirit', label: '保持距离，彼此独立' },
-          { id: 'companionship', label: '细水长流的陪伴' },
-          { id: 'exploring', label: '还在探索中' },
-=======
           {
             id: 'child',
             label: '孩子',
@@ -294,7 +233,6 @@ export const quizConfig: QuizSection[] = [
               },
             ],
           },
->>>>>>> Stashed changes
         ],
       },
     ],
@@ -312,13 +250,6 @@ export const quizConfig: QuizSection[] = [
         type: 'single',
         required: true,
         options: [
-<<<<<<< Updated upstream
-          { id: '18-22', label: '18-22 学生时代' },
-          { id: '23-28', label: '23-28 初入社会' },
-          { id: '29-35', label: '29-35 而立之年' },
-          { id: '36-45', label: '36-45 中流砥柱' },
-          { id: '46+', label: '46+ 丰盈人生' },
-=======
           {
             id: 'missed_city',
             label: '去了你没去成的城市',
@@ -382,7 +313,6 @@ export const quizConfig: QuizSection[] = [
             ],
           },
           { id: 'alter_wish_custom', label: '自定义', isCustomInput: true },
->>>>>>> Stashed changes
         ],
       },
     ],
@@ -400,13 +330,6 @@ export const quizConfig: QuizSection[] = [
         title: '周末早上最理想的第一个动作？',
         type: 'single',
         options: [
-<<<<<<< Updated upstream
-          { id: 'content', label: '平静满足' },
-          { id: 'anxious', label: '有点焦虑' },
-          { id: 'confused', label: '迷茫困惑' },
-          { id: 'excited', label: '充满期待' },
-          { id: 'tired', label: '疲惫但坚持' },
-=======
           {
             id: 'coffee_tea',
             label: '慢慢喝咖啡/茶发呆',
@@ -444,7 +367,6 @@ export const quizConfig: QuizSection[] = [
           { id: 'clean_up', label: '收拾屋子' },
           { id: 'exercise', label: '出门运动/散步' },
           { id: 'no_idea', label: '没想过' },
->>>>>>> Stashed changes
         ],
       },
       {
