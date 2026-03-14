@@ -41,22 +41,44 @@ function RollerColumn<T extends number | string>({
   const itemHeight = 40;
   const visibleCount = 5;
 
+  // 通过重复列表来伪装成「首尾相连」的无限滚动
+  const LOOP = 5;
+  const extendedItems = Array.from(
+    { length: items.length * LOOP },
+    (_, i) => items[i % items.length],
+  );
+  const middleStart = items.length * Math.floor(LOOP / 2);
+
   useEffect(() => {
     const el = scrollerRef.current;
     if (!el) return;
     const idx = items.indexOf(value);
     if (idx >= 0) {
-      el.scrollTop = idx * itemHeight - (visibleCount / 2 - 0.5) * itemHeight;
+      const targetIndex = middleStart + idx;
+      el.scrollTop =
+        targetIndex * itemHeight - (visibleCount / 2 - 0.5) * itemHeight;
     }
-  }, [items, value]);
+  }, [items, value, middleStart]);
 
   const handleScroll = () => {
     const el = scrollerRef.current;
     if (!el) return;
-    const idx = Math.round(el.scrollTop / itemHeight + (visibleCount / 2 - 0.5));
-    const clamped = Math.max(0, Math.min(idx, items.length - 1));
-    const newVal = items[clamped];
+    const rawIndex = Math.round(
+      el.scrollTop / itemHeight + (visibleCount / 2 - 0.5),
+    );
+    const modIndex =
+      ((rawIndex % items.length) + items.length) % items.length;
+    const newVal = items[modIndex];
     if (newVal !== value) onChange(newVal);
+
+    // 如果滚到最外圈，就把滚动位置无感知地挪回中间一圈
+    const minSafe = items.length;
+    const maxSafe = items.length * (LOOP - 1);
+    if (rawIndex < minSafe || rawIndex > maxSafe) {
+      const centeredIndex = middleStart + modIndex;
+      el.scrollTop =
+        centeredIndex * itemHeight - (visibleCount / 2 - 0.5) * itemHeight;
+    }
   };
 
   return (
@@ -74,12 +96,14 @@ function RollerColumn<T extends number | string>({
         {Array.from({ length: Math.floor(visibleCount / 2) }).map((_, i) => (
           <div key={`pad-top-${i}`} style={{ height: itemHeight, scrollSnapAlign: 'start' }} />
         ))}
-        {items.map((item) => (
+        {extendedItems.map((item, idx) => (
           <button
-            key={String(item)}
+            key={`${String(item)}-${idx}`}
             type="button"
             onClick={() => onChange(item)}
-            className={`shrink-0 flex items-center justify-center font-serif transition-colors ${value === item ? 'text-monet-leaf font-semibold' : 'text-monet-haze/70'}`}
+            className={`shrink-0 flex items-center justify-center font-serif transition-colors ${
+              value === item ? 'text-monet-leaf font-semibold' : 'text-monet-haze/70'
+            }`}
             style={{ height: itemHeight, scrollSnapAlign: 'start' }}
           >
             {format(item)}
