@@ -151,7 +151,7 @@ class TestOSSService:
             data = b"fake-image-bytes"
             url = await upload_bytes(data, "story-images/1/abc.jpg", "image/jpeg")
 
-        assert url == "https://hx-img-oss.cn-hangzhou.aliyuncs.com/story-images/1/abc.jpg"
+        assert url == "https://hx-img-oss.oss-cn-hangzhou.aliyuncs.com/story-images/1/abc.jpg"
         mock_bucket.put_object.assert_called_once_with(
             "story-images/1/abc.jpg",
             data,

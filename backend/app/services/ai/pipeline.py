@@ -816,12 +816,20 @@ async def _plan_and_generate_images(
         return
 
     from app.services.image_gen_service import generate_image
-    from app.services.oss_service import upload_from_url, new_key
+    from app.services.oss_service import upload_from_url, new_key, sign_url
 
     # Fetch user's comic avatar URL (used as reference image for character consistency)
     user_result = await session.execute(select(User).where(User.id == user_id))
     user = user_result.scalar_one_or_none()
     comic_avatar_url: str | None = user.comic_avatar_url if user else None
+
+    # Sign the avatar URL so the external image generation API can fetch it
+    if comic_avatar_url:
+        try:
+            comic_avatar_url = sign_url(comic_avatar_url, expires=3600)
+        except Exception as e:
+            logger.warning(f"Failed to sign comic avatar URL, falling back to text-to-image: {e}")
+            comic_avatar_url = None
 
     # ── Step 1: Ask LLM to plan image prompts ──
     blocks_summary = "\n".join(
@@ -894,12 +902,17 @@ async def _plan_and_generate_images(
             continue
         scene = scene_by_index.get(res["block_index"])
         if scene:
-            scene.media_url = res["image_url"]
+            scene.media_url = res["image_url"]  # Store unsigned URL in DB
+        # Send signed URL to frontend so it can display the image
+        try:
+            signed_image_url = sign_url(res["image_url"], expires=3600)
+        except Exception:
+            signed_image_url = res["image_url"]
         yield {
             "type": "image_ready",
             "block_index": res["block_index"],
             "scene_id": res["scene_id"],
-            "image_url": res["image_url"],
+            "image_url": signed_image_url,
         }
 
     try:

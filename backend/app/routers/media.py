@@ -60,15 +60,18 @@ async def upload_photo(
 async def _generate_comic_avatar(user_id: int, photo_url: str) -> None:
     """Background task: generate a comic-style avatar from the user's photo and save to OSS."""
     from app.services.image_gen_service import generate_image
-    from app.services.oss_service import upload_from_url, new_key
+    from app.services.oss_service import upload_from_url, new_key, sign_url
 
     try:
+        # Generate a signed URL so the external image generation API can fetch the photo
+        signed_photo_url = sign_url(photo_url, expires=3600)
+
         prompt = (
             "Convert the person in the photo into a beautifully illustrated storybook character. "
             "Preserve facial features. Warm, delicate illustration style with soft colors. "
             "Suitable for a life narrative story."
         )
-        generated_url = await generate_image(prompt, reference_image_url=photo_url)
+        generated_url = await generate_image(prompt, reference_image_url=signed_photo_url)
 
         object_key = new_key(f"comic-avatars/{user_id}")
         oss_url = await upload_from_url(generated_url, object_key)
@@ -89,9 +92,35 @@ async def _generate_comic_avatar(user_id: int, photo_url: str) -> None:
 async def get_avatar_info(
     user: Annotated[User, Depends(get_current_user)],
 ):
-    """Return the user's photo URL, avatar URL, and comic avatar URL."""
+    """Return the user's photo URL, avatar URL, and comic avatar URL (all signed)."""
+    from app.services.oss_service import sign_url
+
+    def _sign(url: str | None) -> str | None:
+        if not url:
+            return None
+        try:
+            return sign_url(url, expires=3600)
+        except Exception:
+            return None
+
     return ApiResponse(data={
-        "photo_url": user.photo_url,
-        "avatar_url": user.avatar_url,
-        "comic_avatar_url": user.comic_avatar_url,
+        "photo_url": _sign(user.photo_url),
+        "avatar_url": _sign(user.avatar_url),
+        "comic_avatar_url": _sign(user.comic_avatar_url),
     })
+
+
+@router.get("/sign-url", response_model=ApiResponse)
+async def get_signed_url(
+    url: str,
+    user: Annotated[User, Depends(get_current_user)],
+):
+    """Return a signed URL for any OSS object. Frontend calls this to display images."""
+    from app.services.oss_service import sign_url
+
+    try:
+        signed = sign_url(url, expires=3600)
+    except Exception as e:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail=f"无法签名: {e}")
+
+    return ApiResponse(data={"signed_url": signed})

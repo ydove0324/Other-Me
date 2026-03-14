@@ -247,6 +247,16 @@ async def get_story(
     if not life:
         return ApiResponse(data=None, message="尚未生成故事")
 
+    from app.services.oss_service import sign_url
+
+    def _sign(url: str | None) -> str | None:
+        if not url:
+            return None
+        try:
+            return sign_url(url, expires=3600)
+        except Exception:
+            return None
+
     return ApiResponse(data=StoryResponse(
         id=life.id,
         fork_point_id=life.fork_point_id,
@@ -261,7 +271,7 @@ async def get_story(
                 scene_type=s.scene_type,
                 title=s.title,
                 content=s.content,
-                media_url=s.media_url,
+                media_url=_sign(s.media_url),
                 metadata=s.metadata_,
                 sort_order=s.sort_order,
             )
@@ -372,6 +382,16 @@ async def get_life_blocks(
     if not life:
         return ApiResponse(data=None, message="尚未生成")
 
+    from app.services.oss_service import sign_url
+
+    def _sign(url: str | None) -> str | None:
+        if not url:
+            return None
+        try:
+            return sign_url(url, expires=3600)
+        except Exception:
+            return None
+
     return ApiResponse(data=LifeBlocksResponse(
         id=life.id,
         fork_point_id=life.fork_point_id,
@@ -385,7 +405,7 @@ async def get_life_blocks(
                 scene_type=s.scene_type,
                 title=s.title,
                 content=s.content,
-                media_url=s.media_url,
+                media_url=_sign(s.media_url),
                 metadata=s.metadata_,
                 sort_order=s.sort_order,
             )
