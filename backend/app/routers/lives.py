@@ -1,0 +1,225 @@
+from __future__ import annotations
+
+from typing import Annotated
+
+from fastapi import APIRouter, Depends, HTTPException, status
+from sqlalchemy import select
+from sqlalchemy.ext.asyncio import AsyncSession
+from sqlalchemy.orm import selectinload
+
+from app.database import get_session
+from app.models.user import User
+from app.models.fork_point import ForkPoint
+from app.models.life import AlternativeLife, LifeTimelineEvent, LifeScene
+from app.models.base import ForkPointStatus, LifeStatus
+from app.schemas.common import ApiResponse
+from app.schemas.life import AlternativeLifeResponse, TimelineEventResponse, StoryResponse, SceneResponse
+from app.core.deps import get_current_user
+
+router = APIRouter(prefix="/api/v1", tags=["lives"])
+
+
+@router.post("/fork-points/{fork_point_id}/generate", response_model=ApiResponse)
+async def generate_life(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    if fp.status == ForkPointStatus.generating:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="正在生成中，请稍候")
+
+    from app.services.ai.pipeline import generate_alternative_life
+    life = await generate_alternative_life(user.id, fork_point_id, session)
+
+    return ApiResponse(data=AlternativeLifeResponse(
+        id=life.id,
+        fork_point_id=life.fork_point_id,
+        overview=life.overview,
+        status=life.status.value,
+        created_at=life.created_at,
+        events=[
+            TimelineEventResponse(
+                id=e.id,
+                event_date=e.event_date,
+                title=e.title,
+                summary=e.summary,
+                detailed_narrative=e.detailed_narrative,
+                emotional_tone=e.emotional_tone,
+                sort_order=e.sort_order,
+            )
+            for e in life.events
+        ],
+    ).model_dump(mode="json"))
+
+
+@router.get("/fork-points/{fork_point_id}/life", response_model=ApiResponse)
+async def get_life(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    result = await session.execute(
+        select(AlternativeLife)
+        .where(AlternativeLife.fork_point_id == fork_point_id)
+        .options(selectinload(AlternativeLife.events))
+        .order_by(AlternativeLife.created_at.desc())
+        .limit(1)
+    )
+    life = result.scalar_one_or_none()
+    if not life:
+        return ApiResponse(data=None, message="尚未生成平行人生")
+
+    return ApiResponse(data=AlternativeLifeResponse(
+        id=life.id,
+        fork_point_id=life.fork_point_id,
+        overview=life.overview,
+        status=life.status.value,
+        created_at=life.created_at,
+        events=[
+            TimelineEventResponse(
+                id=e.id,
+                event_date=e.event_date,
+                title=e.title,
+                summary=e.summary,
+                detailed_narrative=e.detailed_narrative,
+                emotional_tone=e.emotional_tone,
+                sort_order=e.sort_order,
+            )
+            for e in sorted(life.events, key=lambda e: e.sort_order)
+        ],
+    ).model_dump(mode="json"))
+
+
+@router.get("/lives/{life_id}/events/{event_id}", response_model=ApiResponse)
+async def get_event_detail(
+    life_id: int,
+    event_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    result = await session.execute(
+        select(AlternativeLife).where(AlternativeLife.id == life_id, AlternativeLife.user_id == user.id)
+    )
+    life = result.scalar_one_or_none()
+    if not life:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="平行人生不存在")
+
+    result = await session.execute(
+        select(LifeTimelineEvent).where(
+            LifeTimelineEvent.id == event_id,
+            LifeTimelineEvent.alternative_life_id == life_id,
+        )
+    )
+    event = result.scalar_one_or_none()
+    if not event:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="事件不存在")
+
+    if not event.detailed_narrative:
+        from app.services.ai.pipeline import generate_event_detail
+        event = await generate_event_detail(life_id, event_id, session)
+
+    return ApiResponse(data=TimelineEventResponse(
+        id=event.id,
+        event_date=event.event_date,
+        title=event.title,
+        summary=event.summary,
+        detailed_narrative=event.detailed_narrative,
+        emotional_tone=event.emotional_tone,
+        sort_order=event.sort_order,
+    ).model_dump(mode="json"))
+
+
+@router.post("/fork-points/{fork_point_id}/generate-story", response_model=ApiResponse)
+async def generate_story(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Generate a Markdown story for a fork point."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    if fp.status == ForkPointStatus.generating:
+        raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="正在生成中，请稍候")
+
+    from app.services.ai.pipeline import generate_story as gen_story
+    life = await gen_story(user.id, fork_point_id, session)
+
+    return ApiResponse(data=StoryResponse(
+        id=life.id,
+        fork_point_id=life.fork_point_id,
+        story_title=life.story_title,
+        story_markdown=life.story_markdown,
+        status=life.status.value,
+        content_type=life.content_type,
+        created_at=life.created_at,
+    ).model_dump(mode="json"))
+
+
+@router.get("/fork-points/{fork_point_id}/story", response_model=ApiResponse)
+async def get_story(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Get the generated story for a fork point. Supports polling for status."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    result = await session.execute(
+        select(AlternativeLife)
+        .where(
+            AlternativeLife.fork_point_id == fork_point_id,
+            AlternativeLife.content_type == "story",
+        )
+        .options(selectinload(AlternativeLife.scenes))
+        .order_by(AlternativeLife.created_at.desc())
+        .limit(1)
+    )
+    life = result.scalar_one_or_none()
+    if not life:
+        return ApiResponse(data=None, message="尚未生成故事")
+
+    return ApiResponse(data=StoryResponse(
+        id=life.id,
+        fork_point_id=life.fork_point_id,
+        story_title=life.story_title,
+        story_markdown=life.story_markdown,
+        status=life.status.value,
+        content_type=life.content_type,
+        created_at=life.created_at,
+        scenes=[
+            SceneResponse(
+                id=s.id,
+                scene_type=s.scene_type,
+                title=s.title,
+                content=s.content,
+                media_url=s.media_url,
+                metadata=s.metadata_,
+                sort_order=s.sort_order,
+            )
+            for s in sorted(life.scenes, key=lambda s: s.sort_order)
+        ],
+    ).model_dump(mode="json"))

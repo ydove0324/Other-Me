@@ -1,0 +1,144 @@
+import { useState } from 'react';
+import { motion, AnimatePresence } from 'framer-motion';
+import { quizConfig } from '../../config/quizConfig';
+import BubbleQuestion from './BubbleQuestion';
+import api from '../../services/api';
+
+interface BubbleQuizProps {
+  onComplete: () => void;
+}
+
+export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
+  const [currentSection, setCurrentSection] = useState(0);
+  const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
+  const [submitting, setSubmitting] = useState(false);
+  const [error, setError] = useState('');
+
+  const section = quizConfig[currentSection];
+  const totalSections = quizConfig.length;
+  const progress = ((currentSection + 1) / totalSections) * 100;
+
+  const handleAnswer = (questionId: string, value: string | string[]) => {
+    setAnswers((prev) => ({ ...prev, [questionId]: value }));
+  };
+
+  const isSectionComplete = () => {
+    return section.questions
+      .filter((q) => q.required)
+      .every((q) => {
+        const val = answers[q.id];
+        if (!val) return false;
+        if (Array.isArray(val)) return val.length > 0;
+        return val.length > 0;
+      });
+  };
+
+  const handleNext = async () => {
+    if (currentSection < totalSections - 1) {
+      setCurrentSection((s) => s + 1);
+      return;
+    }
+
+    // Last section — submit
+    setSubmitting(true);
+    setError('');
+    try {
+      await api.post('/profile/quiz-answers', { answers });
+      onComplete();
+    } catch (err: unknown) {
+      const msg = err instanceof Error ? err.message : '提交失败，请重试';
+      setError(msg);
+    } finally {
+      setSubmitting(false);
+    }
+  };
+
+  const handlePrev = () => {
+    if (currentSection > 0) {
+      setCurrentSection((s) => s - 1);
+    }
+  };
+
+  return (
+    <div className="max-w-2xl mx-auto px-4">
+      {/* Progress bar */}
+      <div className="mb-8">
+        <div className="flex justify-between text-sm text-gray-500 mb-2">
+          <span>{section.title}</span>
+          <span>{currentSection + 1} / {totalSections}</span>
+        </div>
+        <div className="h-1.5 bg-gray-100 rounded-full overflow-hidden">
+          <motion.div
+            className="h-full bg-indigo-500 rounded-full"
+            initial={{ width: 0 }}
+            animate={{ width: `${progress}%` }}
+            transition={{ duration: 0.4 }}
+          />
+        </div>
+      </div>
+
+      {/* Section content */}
+      <AnimatePresence mode="wait">
+        <motion.div
+          key={section.id}
+          initial={{ opacity: 0, x: 30 }}
+          animate={{ opacity: 1, x: 0 }}
+          exit={{ opacity: 0, x: -30 }}
+          transition={{ duration: 0.3 }}
+        >
+          {section.subtitle && (
+            <p className="text-gray-500 mb-6">{section.subtitle}</p>
+          )}
+
+          <div className="space-y-8">
+            {section.questions.map((question) => {
+              // Check showIf condition
+              if (question.showIf) {
+                const depValue = answers[question.showIf.questionId];
+                const matches = Array.isArray(depValue)
+                  ? depValue.some((v) => question.showIf!.values.includes(v))
+                  : question.showIf.values.includes(depValue as string);
+                if (!matches) return null;
+              }
+
+              return (
+                <BubbleQuestion
+                  key={question.id}
+                  question={question}
+                  answers={answers}
+                  onAnswer={handleAnswer}
+                />
+              );
+            })}
+          </div>
+        </motion.div>
+      </AnimatePresence>
+
+      {error && (
+        <p className="mt-4 text-red-500 text-sm">{error}</p>
+      )}
+
+      {/* Navigation */}
+      <div className="flex justify-between mt-10">
+        <button
+          onClick={handlePrev}
+          disabled={currentSection === 0}
+          className="px-6 py-2.5 text-gray-500 hover:text-gray-700 disabled:opacity-30 disabled:cursor-not-allowed transition-colors"
+        >
+          &larr; 上一步
+        </button>
+        <button
+          onClick={handleNext}
+          disabled={!isSectionComplete() || submitting}
+          className="px-8 py-2.5 bg-indigo-500 text-white rounded-full font-medium hover:bg-indigo-600 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-md hover:shadow-lg"
+        >
+          {submitting
+            ? '提交中...'
+            : currentSection === totalSections - 1
+              ? '完成问卷'
+              : '下一步 \u2192'}
+        </button>
+      </div>
+    </div>
+  );
+}
