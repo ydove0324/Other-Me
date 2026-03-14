@@ -1,5 +1,6 @@
 from __future__ import annotations
 
+import hashlib
 import uuid
 from datetime import datetime, timedelta, timezone
 
@@ -36,8 +37,10 @@ def generate_refresh_token() -> str:
 
 
 def hash_token(token: str) -> str:
-    return pwd_context.hash(token)
+    """Hash a refresh token using SHA-256 for fast DB lookups."""
+    return hashlib.sha256(token.encode()).hexdigest()
 
 
 def verify_token(plain: str, hashed: str) -> bool:
-    return pwd_context.verify(plain, hashed)
+    """Verify a refresh token by comparing SHA-256 hashes."""
+    return hash_token(plain) == hashed
