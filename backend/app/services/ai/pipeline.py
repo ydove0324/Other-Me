@@ -567,10 +567,43 @@ async def generate_story_stream(
         raise
 
 
+async def generate_story_questions(
+    user_id: int,
+    fork_point_id: int,
+    session: AsyncSession,
+) -> list[dict]:
+    """Generate personalized story questions for a fork point."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise ValueError("Fork point not found")
+
+    persona = await _get_latest_persona(user_id, session)
+    persona_text = persona.persona_summary if persona else "（用户尚未生成画像）"
+
+    template = await get_template("story_questions", session)
+    prompt = render_template(template, {
+        "persona": persona_text,
+        "fork_title": fp.title,
+        "actual_choice": fp.actual_choice,
+        "alternative_choice": fp.alternative_choice,
+    })
+
+    data, _ = await call_llm_json([
+        {"role": "system", "content": "你是一位故事策划师。请用 JSON 格式回复。"},
+        {"role": "user", "content": prompt},
+    ], temperature=0.8, max_tokens=1024)
+
+    return data.get("questions", [])
+
+
 async def generate_life_blocks_stream(
     user_id: int,
     fork_point_id: int,
     session: AsyncSession,
+    user_answers: list[dict] | None = None,
 ):
     """Stream life blocks, yielding structured SSE events.
 
@@ -612,6 +645,13 @@ async def generate_life_blocks_stream(
         "quiz_answers": quiz_answers_text,
         "current_year": str(datetime.now().year),
     })
+
+    if user_answers:
+        answers_text = "\n".join(
+            f"- {a.get('question', '?')}：{a.get('answer', '?')}"
+            for a in user_answers
+        )
+        prompt += f"\n\n## 用户对故事的期望\n{answers_text}"
 
     life = AlternativeLife(
         fork_point_id=fork_point_id,

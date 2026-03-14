@@ -15,7 +15,10 @@ from app.models.fork_point import ForkPoint
 from app.models.life import AlternativeLife, LifeTimelineEvent, LifeScene
 from app.models.base import ForkPointStatus, LifeStatus
 from app.schemas.common import ApiResponse
-from app.schemas.life import AlternativeLifeResponse, TimelineEventResponse, StoryResponse, SceneResponse, LifeBlocksResponse
+from app.schemas.life import (
+    AlternativeLifeResponse, TimelineEventResponse, StoryResponse, SceneResponse,
+    LifeBlocksResponse, StoryQuestion, StoryQuestionsResponse, GenerateLifeStreamRequest,
+)
 from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/api/v1", tags=["lives"])
@@ -267,11 +270,42 @@ async def get_story(
     ).model_dump(mode="json"))
 
 
+@router.get("/fork-points/{fork_point_id}/story-questions", response_model=ApiResponse)
+async def get_story_questions(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Generate personalized story questions for a fork point."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    from app.services.ai.pipeline import generate_story_questions
+    questions = await generate_story_questions(user.id, fork_point_id, session)
+
+    return ApiResponse(data=StoryQuestionsResponse(
+        questions=[
+            StoryQuestion(
+                id=q.get("id", f"q{i+1}"),
+                question=q.get("question", ""),
+                hint=q.get("hint"),
+                options=q.get("options", []),
+            )
+            for i, q in enumerate(questions)
+        ]
+    ).model_dump(mode="json"))
+
+
 @router.post("/fork-points/{fork_point_id}/generate-life-stream")
 async def generate_life_stream_endpoint(
     fork_point_id: int,
     user: Annotated[User, Depends(get_current_user)],
     session: Annotated[AsyncSession, Depends(get_session)],
+    request: GenerateLifeStreamRequest | None = None,
 ):
     """SSE endpoint: streams life blocks as they are generated."""
     result = await session.execute(
@@ -285,10 +319,11 @@ async def generate_life_stream_endpoint(
         raise HTTPException(status_code=status.HTTP_400_BAD_REQUEST, detail="正在生成中，请稍候")
 
     from app.services.ai.pipeline import generate_life_blocks_stream
+    user_answers = request.answers if request else None
 
     async def event_generator():
         try:
-            async for event in generate_life_blocks_stream(user.id, fork_point_id, session):
+            async for event in generate_life_blocks_stream(user.id, fork_point_id, session, user_answers=user_answers):
                 yield f"data: {json.dumps(event, ensure_ascii=False)}\n\n"
         except Exception as e:
             yield f"data: {json.dumps({'type': 'error', 'message': str(e)}, ensure_ascii=False)}\n\n"

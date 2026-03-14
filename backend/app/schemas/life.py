@@ -58,3 +58,18 @@ class LifeBlocksResponse(BaseModel):
 
 class GenerateLifeRequest(BaseModel):
     pass
+
+
+class StoryQuestion(BaseModel):
+    id: str
+    question: str
+    hint: str | None = None
+    options: list[str]
+
+
+class StoryQuestionsResponse(BaseModel):
+    questions: list[StoryQuestion]
+
+
+class GenerateLifeStreamRequest(BaseModel):
+    answers: list[dict] | None = None
