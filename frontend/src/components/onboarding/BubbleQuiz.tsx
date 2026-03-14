@@ -22,14 +22,34 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
     setAnswers((prev) => ({ ...prev, [questionId]: value }));
   };
 
+  /** Check if a question should be shown based on showIf condition (cross-section) */
+  const shouldShowQuestion = (q: { showIf?: { questionId: string; values: string[] } }) => {
+    if (!q.showIf) return true;
+    const depValue = answers[q.showIf.questionId];
+    if (!depValue) return false;
+    return Array.isArray(depValue)
+      ? depValue.some((v) => q.showIf!.values.includes(v))
+      : q.showIf.values.includes(depValue as string);
+  };
+
+  const getVisibleQuestions = () => {
+    return section.questions.filter((q) => shouldShowQuestion(q));
+  };
+
   const isSectionComplete = () => {
-    return section.questions
+    // Skippable sections are never blocking
+    if (section.skippable) return true;
+
+    return getVisibleQuestions()
       .filter((q) => q.required)
       .every((q) => {
         const val = answers[q.id];
         if (!val) return false;
-        if (Array.isArray(val)) return val.length > 0;
-        return val.length > 0;
+        if (Array.isArray(val)) {
+          const min = q.minSelections || 1;
+          return val.length >= min;
+        }
+        return (val as string).length > 0;
       });
   };
 
@@ -43,6 +63,12 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
     setSubmitting(true);
     setError('');
     try {
+      // Update display_name if nickname was provided
+      const nickname = answers['nickname'] as string;
+      if (nickname) {
+        await api.patch('/profile/display-name', { display_name: nickname });
+      }
+
       await api.post('/profile/quiz-answers', { answers });
       onComplete();
     } catch (err: unknown) {
@@ -58,6 +84,14 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
       setCurrentSection((s) => s - 1);
     }
   };
+
+  const handleSkipSection = () => {
+    if (currentSection < totalSections - 1) {
+      setCurrentSection((s) => s + 1);
+    }
+  };
+
+  const isLastSection = currentSection === totalSections - 1;
 
   return (
     <div className="max-w-2xl mx-auto px-4">
@@ -91,26 +125,26 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
           )}
 
           <div className="space-y-8">
-            {section.questions.map((question) => {
-              // Check showIf condition
-              if (question.showIf) {
-                const depValue = answers[question.showIf.questionId];
-                const matches = Array.isArray(depValue)
-                  ? depValue.some((v) => question.showIf!.values.includes(v))
-                  : question.showIf.values.includes(depValue as string);
-                if (!matches) return null;
-              }
-
-              return (
-                <BubbleQuestion
-                  key={question.id}
-                  question={question}
-                  answers={answers}
-                  onAnswer={handleAnswer}
-                />
-              );
-            })}
+            {getVisibleQuestions().map((question) => (
+              <BubbleQuestion
+                key={question.id}
+                question={question}
+                answers={answers}
+                onAnswer={handleAnswer}
+              />
+            ))}
           </div>
+
+          {/* "但……因为人不是被标签定义的" after self_labels */}
+          {section.id === 'daily_texture' && answers['self_labels'] && (Array.isArray(answers['self_labels']) ? (answers['self_labels'] as string[]).length > 0 : false) && (
+            <motion.p
+              initial={{ opacity: 0 }}
+              animate={{ opacity: 1 }}
+              className="mt-4 text-sm text-monet-haze italic font-serif text-center"
+            >
+              但……人不是被标签定义的，你大概率有自己的复杂。
+            </motion.p>
+          )}
         </motion.div>
       </AnimatePresence>
 
@@ -119,7 +153,7 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
       )}
 
       {/* Navigation */}
-      <div className="flex justify-between mt-10">
+      <div className="flex justify-between items-center mt-10">
         <button
           onClick={handlePrev}
           disabled={currentSection === 0}
@@ -127,17 +161,28 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
         >
           &larr; 上一步
         </button>
-        <button
-          onClick={handleNext}
-          disabled={!isSectionComplete() || submitting}
-          className="px-8 py-2.5 bg-monet-sage text-white rounded-full font-medium hover:bg-monet-sage/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-monet hover:shadow-monet-lg font-serif"
-        >
-          {submitting
-            ? '提交中...'
-            : currentSection === totalSections - 1
-              ? '完成问卷'
-              : '下一步 \u2192'}
-        </button>
+
+        <div className="flex gap-3">
+          {section.skippable && (
+            <button
+              onClick={handleSkipSection}
+              className="px-6 py-2.5 text-monet-haze hover:text-monet-cobalt transition-colors font-serif border border-monet-haze/30 rounded-full"
+            >
+              跳过本部分
+            </button>
+          )}
+          <button
+            onClick={handleNext}
+            disabled={!isSectionComplete() || submitting}
+            className="px-8 py-2.5 bg-monet-sage text-white rounded-full font-medium hover:bg-monet-sage/90 disabled:opacity-50 disabled:cursor-not-allowed transition-all shadow-monet hover:shadow-monet-lg font-serif"
+          >
+            {submitting
+              ? '提交中...'
+              : isLastSection
+                ? '准备好啦，和另一个我相遇吧'
+                : '下一步 \u2192'}
+          </button>
+        </div>
       </div>
     </div>
   );

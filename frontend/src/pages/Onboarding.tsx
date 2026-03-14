@@ -1,4 +1,4 @@
-import { useEffect } from "react";
+import { useEffect, useState } from "react";
 import { useNavigate, useSearchParams } from "react-router-dom";
 import { useAuthStore } from "../store/authStore";
 import BubbleQuiz from "../components/onboarding/BubbleQuiz";
@@ -9,12 +9,29 @@ export default function Onboarding() {
   const [searchParams] = useSearchParams();
   const isRedo = searchParams.get("redo") === "true";
   const { user, fetchMe } = useAuthStore();
+  const [clearing, setClearing] = useState(false);
 
   useEffect(() => {
     if (user?.onboarding_completed && !isRedo) {
       navigate("/dashboard", { replace: true });
     }
   }, [user, navigate, isRedo]);
+
+  // In redo mode, clear old persona on mount
+  useEffect(() => {
+    if (!isRedo) return;
+    let cancelled = false;
+    (async () => {
+      setClearing(true);
+      try {
+        await api.delete("/profile/persona");
+      } catch {
+        // ignore — persona may not exist
+      }
+      if (!cancelled) setClearing(false);
+    })();
+    return () => { cancelled = true; };
+  }, [isRedo]);
 
   const handleQuizComplete = async () => {
     try {
@@ -27,6 +44,14 @@ export default function Onboarding() {
     }
     navigate("/dashboard", { replace: true });
   };
+
+  if (clearing) {
+    return (
+      <div className="min-h-screen flex items-center justify-center">
+        <p className="text-monet-haze font-serif">正在准备重新测试……</p>
+      </div>
+    );
+  }
 
   return (
     <div className="min-h-screen bg-canvas bg-gradient-to-b from-[#f0eec8] via-[#e8e8dc] to-[#dde8e0]">

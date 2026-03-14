@@ -196,6 +196,33 @@ async def get_persona(
     ).model_dump())
 
 
+@router.delete("/persona", response_model=ApiResponse)
+async def reset_persona(
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Delete all UserPersona records for the current user (used by redo flow)."""
+    await session.execute(
+        delete(UserPersona).where(UserPersona.user_id == user.id)
+    )
+    await session.commit()
+    return ApiResponse(message="画像已清除")
+
+
+@router.patch("/display-name", response_model=ApiResponse)
+async def update_display_name(
+    body: dict,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Update user display name."""
+    display_name = body.get("display_name", "").strip()
+    if display_name:
+        user.display_name = display_name
+        await session.commit()
+    return ApiResponse(message="昵称已更新")
+
+
 @router.post("/complete-onboarding", response_model=ApiResponse)
 async def complete_onboarding(
     user: Annotated[User, Depends(get_current_user)],
