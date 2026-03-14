@@ -76,7 +76,10 @@ async def get_life(
 
     result = await session.execute(
         select(AlternativeLife)
-        .where(AlternativeLife.fork_point_id == fork_point_id)
+        .where(
+            AlternativeLife.fork_point_id == fork_point_id,
+            AlternativeLife.content_type == "timeline",
+        )
         .options(selectinload(AlternativeLife.events))
         .order_by(AlternativeLife.created_at.desc())
         .limit(1)
