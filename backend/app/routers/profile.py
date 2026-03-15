@@ -26,8 +26,31 @@ from app.schemas.profile import (
     UserProfileResponse,
 )
 from app.core.deps import get_current_user
+from app.core.config import settings
 
 router = APIRouter(prefix="/api/v1/profile", tags=["profile"])
+
+
+def _sign_oss_url(url: str | None) -> str | None:
+    """Sign an OSS URL if it's from our private bucket."""
+    if not url or settings.OSS_BUCKET_NAME not in url:
+        return url
+    try:
+        from app.services.oss_service import sign_url
+        return sign_url(url, expires=3600)
+    except Exception:
+        return url
+
+
+def _get_avatar_url(user: User) -> str | None:
+    """Get the best available avatar URL for user.
+
+    Priority: comic_avatar_url > avatar_url > None
+    """
+    # Prefer comic avatar if available
+    if user.comic_avatar_url:
+        return _sign_oss_url(user.comic_avatar_url)
+    return _sign_oss_url(user.avatar_url)
 
 
 @router.get("/tags", response_model=ApiResponse)
@@ -252,7 +275,7 @@ async def get_profile_summary(
         user_id=user.id,
         display_name=user.display_name,
         email=user.email,
-        avatar_url=user.avatar_url,
+        avatar_url=_get_avatar_url(user),
         onboarding_completed=user.onboarding_completed,
         selected_tags=[TagResponse(id=t.id, name=t.name, display_name=t.display_name, description=t.description) for t in tags],
         persona=PersonaResponse(

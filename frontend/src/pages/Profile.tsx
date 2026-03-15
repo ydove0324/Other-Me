@@ -5,6 +5,23 @@ import api from "../services/api";
 import { quizConfig } from "../config/quizConfig";
 import type { ApiResponse, Persona, ForkPoint } from "../types";
 
+// Avatar 风格选项
+const AVATAR_STYLES = [
+  { id: "comic", label: "漫画风格", emoji: "🎨" },
+  { id: "chibi", label: "Q版风格", emoji: "🧸" },
+  { id: "realistic", label: "写实风格", emoji: "📷" },
+  { id: "sketch", label: "素描风格", emoji: "✏️" },
+  { id: "watercolor", label: "水彩风格", emoji: "🖌️" },
+] as const;
+
+type AvatarStyle = typeof AVATAR_STYLES[number]["id"];
+
+interface AvatarInfo {
+  photo_url: string | null;
+  avatar_url: string | null;
+  comic_avatar_url: string | null;
+}
+
 // ── helpers ──────────────────────────────────────────────────────────────────
 
 function getLabel(questionId: string, valueId: string): string {
@@ -114,18 +131,69 @@ export default function Profile() {
   const [loading, setLoading] = useState(true);
   const [activeSection, setActiveSection] = useState<"quiz" | "stories">("quiz");
 
+  // Avatar 相关状态
+  const [avatarInfo, setAvatarInfo] = useState<AvatarInfo | null>(null);
+  const [selectedStyle, setSelectedStyle] = useState<AvatarStyle>("comic");
+  const [isRegenerating, setIsRegenerating] = useState(false);
+  const [showStyleSelector, setShowStyleSelector] = useState(false);
+  const [regenerateMessage, setRegenerateMessage] = useState<string | null>(null);
+
+  // 加载头像信息
+  const loadAvatarInfo = async () => {
+    try {
+      const res = await api.get<ApiResponse<AvatarInfo>>("/media/avatar-info");
+      if (res.data.code === 0 && res.data.data) {
+        setAvatarInfo(res.data.data);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  // 重新生成头像
+  const handleRegenerateAvatar = async () => {
+    if (!avatarInfo?.photo_url) {
+      setRegenerateMessage("请先上传照片后再生成头像");
+      setTimeout(() => setRegenerateMessage(null), 3000);
+      return;
+    }
+
+    setIsRegenerating(true);
+    setRegenerateMessage(null);
+    try {
+      const res = await api.post<ApiResponse<{ message: string; style: string; style_name: string }>>(
+        `/media/regenerate-avatar?style=${selectedStyle}`
+      );
+      if (res.data.code === 0 && res.data.data) {
+        setRegenerateMessage(`正在生成${res.data.data.style_name}头像，请稍后刷新查看...`);
+        setShowStyleSelector(false);
+      } else {
+        setRegenerateMessage(res.data.message || "生成失败，请重试");
+      }
+    } catch (e: any) {
+      setRegenerateMessage(e?.response?.data?.detail || "生成失败，请重试");
+    } finally {
+      setIsRegenerating(false);
+      setTimeout(() => setRegenerateMessage(null), 5000);
+    }
+  };
+
   useEffect(() => {
     (async () => {
       try {
-        const [personaRes, forkRes] = await Promise.all([
+        const [personaRes, forkRes, avatarRes] = await Promise.all([
           api.get<ApiResponse<Persona>>("/profile/persona"),
           api.get<ApiResponse<ForkPoint[]>>("/fork-points"),
+          api.get<ApiResponse<AvatarInfo>>("/media/avatar-info"),
         ]);
         if (personaRes.data.code === 0 && personaRes.data.data) {
           setPersona(personaRes.data.data);
         }
         if (forkRes.data.code === 0 && forkRes.data.data) {
           setForkPoints(forkRes.data.data);
+        }
+        if (avatarRes.data.code === 0 && avatarRes.data.data) {
+          setAvatarInfo(avatarRes.data.data);
         }
       } catch {
         // ignore
@@ -173,19 +241,82 @@ export default function Profile() {
 
         {/* Avatar + name */}
         <div className="flex flex-col items-center gap-4 pt-2">
-          {user?.avatar_url ? (
-            <img
-              src={user.avatar_url}
-              alt={user.display_name}
-              className="w-24 h-24 rounded-full ring-4 ring-white shadow-monet object-cover"
-            />
-          ) : (
-            <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-monet bg-gradient-to-br from-monet-sage to-monet-lotus flex items-center justify-center">
-              <span className="text-white text-3xl font-serif font-bold">
-                {user?.display_name?.[0]?.toUpperCase() ?? "?"}
-              </span>
+          {/* 头像展示区 */}
+          <div className="relative group">
+            {user?.avatar_url ? (
+              <img
+                src={user.avatar_url}
+                alt={user.display_name}
+                className="w-24 h-24 rounded-full ring-4 ring-white shadow-monet object-cover"
+              />
+            ) : (
+              <div className="w-24 h-24 rounded-full ring-4 ring-white shadow-monet bg-gradient-to-br from-monet-sage to-monet-lotus flex items-center justify-center">
+                <span className="text-white text-3xl font-serif font-bold">
+                  {user?.display_name?.[0]?.toUpperCase() ?? "?"}
+                </span>
+              </div>
+            )}
+
+            {/* 重新生成按钮 - 悬浮显示 */}
+            <button
+              onClick={() => setShowStyleSelector(!showStyleSelector)}
+              className="absolute -bottom-1 -right-1 w-8 h-8 bg-monet-sage text-white rounded-full shadow-monet flex items-center justify-center hover:bg-monet-sage/90 transition-all hover:scale-110"
+              title="重新生成头像"
+            >
+              <span className="text-sm">🔄</span>
+            </button>
+          </div>
+
+          {/* 风格选择器 */}
+          {showStyleSelector && (
+            <div className="bg-white/90 border border-monet-haze/20 rounded-2xl p-4 w-full max-w-sm space-y-3 animate-in fade-in slide-in-from-top-2 duration-200">
+              <p className="font-serif text-sm text-monet-leaf font-medium text-center">
+                选择头像风格
+              </p>
+              <div className="grid grid-cols-3 gap-2">
+                {AVATAR_STYLES.map((style) => (
+                  <button
+                    key={style.id}
+                    onClick={() => setSelectedStyle(style.id)}
+                    className={`flex flex-col items-center gap-1 p-2 rounded-xl transition-all ${
+                      selectedStyle === style.id
+                        ? "bg-monet-sage/20 border-2 border-monet-sage"
+                        : "bg-monet-haze/5 border-2 border-transparent hover:bg-monet-haze/10"
+                    }`}
+                  >
+                    <span className="text-lg">{style.emoji}</span>
+                    <span className="font-serif text-xs text-monet-leaf">{style.label}</span>
+                  </button>
+                ))}
+              </div>
+              <button
+                onClick={handleRegenerateAvatar}
+                disabled={isRegenerating}
+                className="w-full bg-monet-sage text-white py-2 rounded-xl font-serif text-sm hover:bg-monet-sage/90 transition-all disabled:opacity-50 disabled:cursor-not-allowed flex items-center justify-center gap-2"
+              >
+                {isRegenerating ? (
+                  <>
+                    <span className="animate-spin inline-block">⏳</span>
+                    生成中...
+                  </>
+                ) : (
+                  <>✨ 生成新头像</>
+                )}
+              </button>
             </div>
           )}
+
+          {/* 提示消息 */}
+          {regenerateMessage && (
+            <div className={`px-4 py-2 rounded-full font-serif text-sm animate-in fade-in ${
+              regenerateMessage.includes("正在生成")
+                ? "bg-monet-sage/10 text-monet-sage"
+                : "bg-red-50 text-red-500"
+            }`}>
+              {regenerateMessage}
+            </div>
+          )}
+
           <div className="text-center">
             <h2 className="font-serif text-2xl font-bold text-monet-leaf">{user?.display_name}</h2>
             <p className="text-sm text-monet-haze mt-1 font-serif">{user?.email}</p>
@@ -381,15 +512,7 @@ function ForkCard({ fp, onTimeline, onStory }: { fp: ForkPoint; onTimeline: () =
               onClick={onTimeline}
               className="flex items-center gap-1.5 text-xs font-serif px-3 py-1.5 rounded-full bg-monet-sage/10 text-monet-sage border border-monet-sage/20 hover:bg-monet-sage/20 transition-all"
             >
-              <span>📅</span> 时间线
-            </button>
-          )}
-          {fp.has_story && (
-            <button
-              onClick={onStory}
-              className="flex items-center gap-1.5 text-xs font-serif px-3 py-1.5 rounded-full bg-monet-lotus/10 text-monet-leaf border border-monet-lotus/20 hover:bg-monet-lotus/20 transition-all"
-            >
-              <span>📖</span> 故事文章
+              <span>📖</span> 查看故事
             </button>
           )}
         </div>

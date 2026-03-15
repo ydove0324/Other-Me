@@ -31,6 +31,30 @@ GOOGLE_USERINFO_URL = "https://www.googleapis.com/oauth2/v2/userinfo"
 router = APIRouter(prefix="/api/v1/auth", tags=["auth"])
 
 
+def _sign_oss_url(url: str | None) -> str | None:
+    """Sign an OSS URL if it's from our private bucket; pass through others (e.g. Google avatar)."""
+    if not url:
+        return None
+    if settings.OSS_BUCKET_NAME not in url:
+        return url  # External URL (e.g. Google profile pic), no signing needed
+    try:
+        from app.services.oss_service import sign_url
+        return sign_url(url, expires=3600)
+    except Exception:
+        return url
+
+
+def _get_avatar_url(user: User) -> str | None:
+    """Get the best available avatar URL for user.
+
+    Priority: comic_avatar_url > avatar_url > None
+    """
+    # Prefer comic avatar if available
+    if user.comic_avatar_url:
+        return _sign_oss_url(user.comic_avatar_url)
+    return _sign_oss_url(user.avatar_url)
+
+
 async def _create_tokens(user: User, session: AsyncSession) -> TokenResponse:
     access_token = create_access_token(user_id=user.id)
     raw_refresh = generate_refresh_token()
@@ -77,7 +101,7 @@ async def refresh(body: RefreshRequest, session: Annotated[AsyncSession, Depends
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
-            "avatar_url": user.avatar_url,
+            "avatar_url": _get_avatar_url(user),
             "onboarding_completed": user.onboarding_completed,
         },
     })
@@ -108,7 +132,7 @@ async def get_me(user: Annotated[User, Depends(get_current_user)]):
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
-            "avatar_url": user.avatar_url,
+            "avatar_url": _get_avatar_url(user),
             "onboarding_completed": user.onboarding_completed,
         },
     )
