@@ -619,8 +619,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'optimist_detail',
-                title: '这样的你，通常会做什么？',
-                type: 'single',
+                title: '这样的你，通常会做什么？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'solve_first', label: '遇到困难先想解决办法' },
                   { id: 'find_bright', label: '经常从坏事里找好的一面' },
@@ -637,8 +637,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'emotional_detail',
-                title: '感性的表现？',
-                type: 'single',
+                title: '感性的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'cry_movie', label: '看电影容易哭' },
                   { id: 'moved_easily', label: '容易被小事打动' },
@@ -655,8 +655,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'romantic_detail',
-                title: '浪漫的表现？',
-                type: 'single',
+                title: '浪漫的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'sunset_stars', label: '喜欢看日落/星空' },
                   { id: 'surprise', label: '会为特别的日子准备惊喜' },
@@ -673,8 +673,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'pragmatist_detail',
-                title: '实用的表现？',
-                type: 'single',
+                title: '实用的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'cost_perf', label: '买东西先看性价比' },
                   { id: 'whats_use', label: '做事先想"有什么用"' },
@@ -691,8 +691,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'rational_detail',
-                title: '理性的表现？',
-                type: 'single',
+                title: '理性的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'analyze_pros', label: '做决定前先分析利弊' },
                   { id: 'not_emotional', label: '不容易情绪化' },
@@ -709,8 +709,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'hedonist_detail',
-                title: '享受的表现？',
-                type: 'single',
+                title: '享受的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'yolo', label: '人生苦短，及时行乐' },
                   { id: 'food_travel', label: '喜欢美食/旅行/舒服的事' },
@@ -727,8 +727,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'night_owl_detail',
-                title: '夜猫子的日常？',
-                type: 'single',
+                title: '夜猫子的日常？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'night_efficient', label: '晚上效率高' },
                   { id: 'more_awake', label: '越夜越精神' },
@@ -745,8 +745,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'morning_detail',
-                title: '早起的感觉？',
-                type: 'single',
+                title: '早起的感觉？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'earned', label: '早起感觉赚到了' },
                   { id: 'morning_time', label: '喜欢清晨的时光' },
@@ -763,8 +763,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'introvert_detail',
-                title: '内向的表现？',
-                type: 'single',
+                title: '内向的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'recharge_alone', label: '独处是在充电' },
                   { id: 'tired_social', label: '社交后会累' },
@@ -781,8 +781,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'extrovert_detail',
-                title: '外向的表现？',
-                type: 'single',
+                title: '外向的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'energy_people', label: '和人待着就有能量' },
                   { id: 'love_bustle', label: '喜欢热闹' },
@@ -799,8 +799,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'adventurer_detail',
-                title: '冒险的表现？',
-                type: 'single',
+                title: '冒险的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'try_new', label: '喜欢尝试没做过的事' },
                   { id: 'no_fear', label: '不怕未知' },
@@ -817,8 +817,8 @@ export const quizConfig: QuizSection[] = [
             children: [
               {
                 id: 'stable_detail',
-                title: '安稳的表现？',
-                type: 'single',
+                title: '安稳的表现？（可多选）',
+                type: 'multi',
                 options: [
                   { id: 'certain_life', label: '喜欢确定的生活' },
                   { id: 'think_risk', label: '做决定前会想风险' },

@@ -178,6 +178,27 @@ export default function Profile() {
     }
   };
 
+  const loadForkPoints = async () => {
+    try {
+      const forkRes = await api.get<ApiResponse<ForkPoint[]>>("/fork-points");
+      if (forkRes.data.code === 0 && forkRes.data.data) {
+        setForkPoints(forkRes.data.data);
+      }
+    } catch {
+      // ignore
+    }
+  };
+
+  const handleDeleteStory = async (forkPointId: number) => {
+    if (!confirm("确定要删除这个故事吗？删除后可重新生成。")) return;
+    try {
+      await api.delete(`/fork-points/${forkPointId}/story`);
+      await loadForkPoints();
+    } catch {
+      // toast or handle error
+    }
+  };
+
   useEffect(() => {
     (async () => {
       try {
@@ -440,11 +461,12 @@ export default function Profile() {
                     </p>
                     {completedStories.map((fp) => (
                       <ForkCard
-                      key={fp.id}
-                      fp={fp}
-                      onTimeline={() => navigate(`/life/${fp.id}`)}
-                      onStory={() => navigate(`/story/${fp.id}`)}
-                    />
+                        key={fp.id}
+                        fp={fp}
+                        onTimeline={() => navigate(`/life/${fp.id}`)}
+                        onStory={() => navigate(`/story/${fp.id}`)}
+                        onDelete={() => handleDeleteStory(fp.id)}
+                      />
                     ))}
                   </div>
                 )}
@@ -457,11 +479,12 @@ export default function Profile() {
                     )}
                     {otherForks.map((fp) => (
                       <ForkCard
-                      key={fp.id}
-                      fp={fp}
-                      onTimeline={() => navigate(`/life/${fp.id}`)}
-                      onStory={() => navigate(`/story/${fp.id}`)}
-                    />
+                        key={fp.id}
+                        fp={fp}
+                        onTimeline={() => navigate(`/life/${fp.id}`)}
+                        onStory={() => navigate(`/story/${fp.id}`)}
+                        onDelete={() => handleDeleteStory(fp.id)}
+                      />
                     ))}
                   </div>
                 )}
@@ -474,16 +497,26 @@ export default function Profile() {
   );
 }
 
-function ForkCard({ fp, onTimeline, onStory }: { fp: ForkPoint; onTimeline: () => void; onStory: () => void }) {
+function ForkCard({ fp, onTimeline, onStory, onDelete }: { fp: ForkPoint; onTimeline: () => void; onStory: () => void; onDelete: () => void }) {
   const s = statusConfig[fp.status] ?? statusConfig.draft;
   const hasAny = fp.has_timeline || fp.has_story;
 
   return (
-    <div className="bg-white/80 border border-monet-haze/20 rounded-2xl p-5">
+    <div className="bg-white/80 border border-monet-haze/20 rounded-2xl p-5 relative">
       {/* Title row */}
       <div className="flex items-center gap-2 mb-1.5">
         <span className={`w-2 h-2 rounded-full shrink-0 ${s.dot}`} />
         <h4 className="font-serif font-semibold text-monet-leaf truncate flex-1">{fp.title}</h4>
+        {hasAny && (
+          <button
+            type="button"
+            onClick={(e) => { e.stopPropagation(); onDelete(); }}
+            className="shrink-0 w-7 h-7 flex items-center justify-center rounded-lg text-monet-haze/60 hover:text-red-500 hover:bg-red-50 transition-colors"
+            title="删除故事"
+          >
+            🗑
+          </button>
+        )}
         {!hasAny && (
           <span className={`text-xs px-2 py-0.5 rounded-full shrink-0 ${s.badge}`}>{s.text}</span>
         )}

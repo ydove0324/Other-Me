@@ -12,6 +12,7 @@ from sqlalchemy.orm import selectinload
 from app.models.profile import Tag, UserTag, QuestionnaireAnswer, QuestionnaireQuestion, UserPersona
 from app.models.fork_point import ForkPoint
 from app.models.life import AlternativeLife, LifeTimelineEvent, LifeScene
+from app.models.memory import UserMemory
 from app.models.ai_config import GenerationTask
 from app.models.base import ForkPointStatus, LifeStatus, TaskStatus, TaskType
 from app.models.user import User
@@ -655,6 +656,15 @@ async def generate_life_blocks_stream(
         )
         prompt += f"\n\n## 用户对故事的期望\n{answers_text}"
 
+    # Include user memories (from past fork points they chose to add)
+    mem_result = await session.execute(
+        select(UserMemory).where(UserMemory.user_id == user_id).order_by(UserMemory.created_at.desc())
+    )
+    memories = mem_result.scalars().all()
+    if memories:
+        mem_text = "\n\n---\n\n".join(m.content for m in memories)
+        prompt += f"\n\n## 用户过往选择加入的记忆（请作为理解用户的参考）\n{mem_text}"
+
     life = AlternativeLife(
         fork_point_id=fork_point_id,
         user_id=user_id,
@@ -759,6 +769,8 @@ async def generate_life_blocks_stream(
         life.story_title = parsed_blocks[0]["title"] if parsed_blocks else fp.title
         life.overview = fp.title
         life.status = LifeStatus.completed
+        if user_answers:
+            life.generation_metadata = {"user_answers": user_answers}
 
         db_scenes: list[LifeScene] = []
         for pb in parsed_blocks:

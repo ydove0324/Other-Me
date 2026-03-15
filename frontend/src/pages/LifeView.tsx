@@ -35,11 +35,14 @@ export default function LifeView() {
   const [forkPoint, setForkPoint] = useState<ForkPoint | null>(null);
   const [blocks, setBlocks] = useState<LifeBlock[]>([]);
   const [questions, setQuestions] = useState<StoryQuestion[]>([]);
-  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
+  const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string[]>>({});
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
   const [showCustomInput, setShowCustomInput] = useState<Record<string, boolean>>({});
   const [thinkingStep, setThinkingStep] = useState(0);
   const [error, setError] = useState('');
+  const [memoryModal, setMemoryModal] = useState<{ open: boolean; content: string; alreadyAdded: boolean } | null>(null);
+  const [memoryLoading, setMemoryLoading] = useState(false);
+  const [memoryFeedback, setMemoryFeedback] = useState<'added' | 'skipped' | null>(null);
   const abortRef = useRef<AbortController | null>(null);
   const blockRefs = useRef<Map<number, HTMLDivElement>>(new Map());
   const thinkingTimerRef = useRef<ReturnType<typeof setInterval> | null>(null);
@@ -270,14 +273,16 @@ export default function LifeView() {
     // eslint-disable-next-line react-hooks/exhaustive-deps
   }, [forkPointId]);
 
-  // Build UserAnswer[] from selected / custom inputs
+  // Build UserAnswer[] from selected options + custom inputs (1-2 options, can add custom)
   const buildAnswers = (): UserAnswer[] =>
     questions
       .map((q) => {
+        const selected = selectedAnswers[q.id] ?? [];
         const custom = showCustomInput[q.id] ? customInputs[q.id]?.trim() : undefined;
-        const answer = custom || selectedAnswers[q.id];
-        if (!answer) return null;
-        return { question: q.question, answer };
+        const parts = [...selected];
+        if (custom) parts.push(custom);
+        if (parts.length === 0) return null;
+        return { question: q.question, answer: parts.join('；') };
       })
       .filter(Boolean) as UserAnswer[];
 
@@ -298,16 +303,59 @@ export default function LifeView() {
   }, [startStream]);
 
   const toggleOption = (qId: string, option: string) => {
-    setSelectedAnswers((prev) => ({ ...prev, [qId]: prev[qId] === option ? '' : option }));
-    setShowCustomInput((prev) => ({ ...prev, [qId]: false }));
+    setSelectedAnswers((prev) => {
+      const current = prev[qId] ?? [];
+      const has = current.includes(option);
+      if (has) return { ...prev, [qId]: current.filter((o) => o !== option) };
+      if (current.length >= 2) return prev; // max 2
+      return { ...prev, [qId]: [...current, option] };
+    });
   };
 
   const toggleCustomInput = (qId: string) => {
-    setShowCustomInput((prev) => {
-      const next = !prev[qId];
-      if (next) setSelectedAnswers((sa) => ({ ...sa, [qId]: '' }));
-      return { ...prev, [qId]: next };
-    });
+    setShowCustomInput((prev) => ({ ...prev, [qId]: !prev[qId] }));
+  };
+
+  const openMemoryModal = async () => {
+    setMemoryLoading(true);
+    setMemoryFeedback(null);
+    try {
+      const res = await api.get<ApiResponse<{ content: string; already_added: boolean }>>(
+        `/fork-points/${forkPointId}/memory-preview`
+      );
+      if (res.data.code === 0 && res.data.data) {
+        setMemoryModal({
+          open: true,
+          content: res.data.data.content,
+          alreadyAdded: res.data.data.already_added,
+        });
+      }
+    } catch {
+      setMemoryFeedback(null);
+    } finally {
+      setMemoryLoading(false);
+    }
+  };
+
+  const handleMemoryConfirm = async () => {
+    try {
+      await api.post(`/fork-points/${forkPointId}/memories`);
+      setMemoryFeedback('added');
+      setTimeout(() => {
+        setMemoryModal(null);
+        setMemoryFeedback(null);
+      }, 800);
+    } catch {
+      setMemoryFeedback(null);
+    }
+  };
+
+  const handleMemoryCancel = () => {
+    setMemoryFeedback('skipped');
+    setTimeout(() => {
+      setMemoryModal(null);
+      setMemoryFeedback(null);
+    }, 800);
   };
 
   const isStreaming = phase === 'streaming';
@@ -421,7 +469,8 @@ export default function LifeView() {
                     </h3>
                     <button
                       onClick={() => {
-                        setSelectedAnswers((sa) => ({ ...sa, [q.id]: '' }));
+                        setSelectedAnswers((sa) => ({ ...sa, [q.id]: [] }));
+                        setCustomInputs((ci) => ({ ...ci, [q.id]: '' }));
                         setShowCustomInput((sc) => ({ ...sc, [q.id]: false }));
                       }}
                       className="ml-4 text-xs text-monet-haze/60 hover:text-monet-haze transition-colors font-serif shrink-0 mt-0.5"
@@ -429,12 +478,12 @@ export default function LifeView() {
                       跳过
                     </button>
                   </div>
-                  {q.hint && (
-                    <p className="text-monet-haze text-xs font-serif mb-4">{q.hint}</p>
-                  )}
+                  <p className="text-monet-haze text-xs font-serif mb-4">
+                    {q.hint || '（选择1-2个选项，你还可以补充描述）'}
+                  </p>
                   <div className="grid grid-cols-2 gap-2 mt-4">
                     {q.options.map((opt) => {
-                      const isSelected = selectedAnswers[q.id] === opt && !showCustomInput[q.id];
+                      const isSelected = (selectedAnswers[q.id] ?? []).includes(opt);
                       return (
                         <button
                           key={opt}
@@ -618,6 +667,13 @@ export default function LifeView() {
           {phase === 'done' && displayBlocks.length > 0 && !error && (
             <div className="mt-10 flex flex-wrap gap-3 justify-center">
               <button
+                onClick={openMemoryModal}
+                disabled={memoryLoading}
+                className="px-6 py-2.5 border border-monet-haze/50 text-monet-haze rounded-full hover:border-monet-sage hover:text-monet-sage transition-all font-serif disabled:opacity-60"
+              >
+                {memoryLoading ? '加载中…' : '加入我的记忆库'}
+              </button>
+              <button
                 onClick={() => { setBlocks([]); loadQuestionsAndShow(); }}
                 className="px-6 py-2.5 border border-monet-haze/50 text-monet-haze rounded-full hover:border-monet-sage hover:text-monet-sage transition-all font-serif"
               >
@@ -633,6 +689,71 @@ export default function LifeView() {
           )}
         </div>
       )}
+
+      {/* 加入记忆库 Modal */}
+      <AnimatePresence>
+        {memoryModal?.open && (
+          <motion.div
+            initial={{ opacity: 0 }}
+            animate={{ opacity: 1 }}
+            exit={{ opacity: 0 }}
+            className="fixed inset-0 z-50 flex items-center justify-center bg-black/40 backdrop-blur-sm px-4"
+            onClick={() => !memoryFeedback && handleMemoryCancel()}
+          >
+            <motion.div
+              initial={{ opacity: 0, scale: 0.95 }}
+              animate={{ opacity: 1, scale: 1 }}
+              exit={{ opacity: 0, scale: 0.95 }}
+              onClick={(e) => e.stopPropagation()}
+              className="bg-white rounded-2xl shadow-xl max-w-lg w-full max-h-[80vh] overflow-hidden border border-monet-haze/20"
+            >
+              <div className="p-6 overflow-y-auto max-h-[60vh]">
+                <h3 className="font-serif text-lg font-semibold text-monet-leaf mb-3">
+                  将以下内容加入记忆库？
+                </h3>
+                <p className="text-monet-haze text-xs font-serif mb-4">
+                  这些信息会在未来生成其他故事时作为参考，帮助 AI 更了解你。
+                </p>
+                <pre className="whitespace-pre-wrap text-sm text-monet-leaf/90 font-serif bg-monet-haze/5 rounded-xl p-4 border border-monet-haze/10">
+                  {memoryModal.content}
+                </pre>
+              </div>
+              <div className="p-4 border-t border-monet-haze/20 flex gap-3 justify-end">
+                {memoryModal.alreadyAdded ? (
+                  <>
+                    <span className="text-monet-sage font-serif text-sm py-2 mr-2">已在记忆中</span>
+                    <button
+                      onClick={() => setMemoryModal(null)}
+                      className="px-5 py-2.5 border border-monet-haze/40 text-monet-haze rounded-full font-serif text-sm hover:bg-monet-haze/5 transition-all"
+                    >
+                      关闭
+                    </button>
+                  </>
+                ) : memoryFeedback ? (
+                  <span className="text-monet-leaf font-serif text-sm py-2">
+                    {memoryFeedback === 'added' ? '已加入' : '未加入'}
+                  </span>
+                ) : (
+                  <>
+                    <button
+                      onClick={handleMemoryCancel}
+                      className="px-5 py-2.5 border border-monet-haze/40 text-monet-haze rounded-full font-serif text-sm hover:bg-monet-haze/5 transition-all"
+                    >
+                      取消
+                    </button>
+                    <button
+                      onClick={handleMemoryConfirm}
+                      className="px-6 py-2.5 bg-monet-sage text-white rounded-full font-serif text-sm hover:bg-monet-sage/90 transition-all"
+                    >
+                      确认
+                    </button>
+                  </>
+                )}
+              </div>
+            </motion.div>
+          </motion.div>
+        )}
+      </AnimatePresence>
     </div>
   );
 }
