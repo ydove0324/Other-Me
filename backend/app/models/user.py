@@ -18,6 +18,8 @@ class User(Base, TimestampMixin):
     email: Mapped[str] = mapped_column(String(255), unique=True, nullable=False)
     display_name: Mapped[str] = mapped_column(String(100), nullable=False, default="")
     avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    photo_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
+    comic_avatar_url: Mapped[str | None] = mapped_column(String(500), nullable=True)
     onboarding_completed: Mapped[bool] = mapped_column(
         Boolean, default=False, server_default="false", nullable=False,
     )

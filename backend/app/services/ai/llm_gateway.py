@@ -144,34 +144,80 @@ async def call_llm_stream(
             yield chunk.choices[0].delta.content
 
 
+def _clean_json(text: str) -> str:
+    """Best-effort cleanup of LLM output into parseable JSON."""
+    cleaned = text.strip()
+    if not cleaned:
+        raise json.JSONDecodeError("Empty response from LLM", cleaned, 0)
+    # Strip markdown code fences
+    if cleaned.startswith("```"):
+        lines = cleaned.split("\n")
+        # Remove first line (```json or ```) and last line (```)
+        if lines[-1].strip() == "```":
+            lines = lines[1:-1]
+        else:
+            lines = lines[1:]
+        cleaned = "\n".join(lines).strip()
+    # Find first { or [ and last } or ]
+    start = -1
+    for i, ch in enumerate(cleaned):
+        if ch in "{[":
+            start = i
+            break
+    if start == -1:
+        raise json.JSONDecodeError("No JSON object/array found", cleaned, 0)
+    end = -1
+    for i in range(len(cleaned) - 1, start - 1, -1):
+        if cleaned[i] in "}]":
+            end = i
+            break
+    if end == -1:
+        raise json.JSONDecodeError("No closing bracket found", cleaned, 0)
+    return cleaned[start:end + 1]
+
+
 async def call_llm_json(
     messages: list[dict[str, str]],
     *,
     model: str | None = None,
     temperature: float = 0.7,
     max_tokens: int = 4096,
+    max_retries: int = 2,
 ) -> tuple[Any, dict]:
     """
     Call LLM and parse response as JSON.
+    Retries up to max_retries times on JSON parse failure.
     Returns (parsed_data, usage_info).
     """
-    response = await call_llm(
-        messages,
-        model=model,
-        temperature=temperature,
-        max_tokens=max_tokens,
-        response_format={"type": "json_object"},
-    )
-    content = extract_content(response)
-    usage = extract_usage(response)
+    last_error: Exception | None = None
 
-    try:
-        data = json.loads(content)
-    except json.JSONDecodeError:
-        cleaned = content.strip()
-        if cleaned.startswith("```"):
-            lines = cleaned.split("\n")
-            cleaned = "\n".join(lines[1:-1] if lines[-1].strip() == "```" else lines[1:])
-        data = json.loads(cleaned)
+    for attempt in range(1 + max_retries):
+        response = await call_llm(
+            messages,
+            model=model,
+            temperature=temperature,
+            max_tokens=max_tokens,
+            response_format={"type": "json_object"},
+        )
+        content = extract_content(response)
+        usage = extract_usage(response)
 
-    return data, usage
+        try:
+            data = json.loads(content)
+            return data, usage
+        except json.JSONDecodeError:
+            pass
+
+        # Try cleaning the content
+        try:
+            cleaned = _clean_json(content)
+            data = json.loads(cleaned)
+            return data, usage
+        except json.JSONDecodeError as e:
+            last_error = e
+            logger.warning(
+                f"LLM JSON parse failed (attempt {attempt + 1}/{1 + max_retries}): {e}. "
+                f"Raw content (first 500 chars): {content[:500]!r}"
+            )
+
+    raise last_error  # type: ignore[misc]

@@ -24,3 +24,9 @@ openai>=1.30.0
 
 # Logging
 python-json-logger>=3.2.0
+
+# File upload
+python-multipart>=0.0.9
+
+# Aliyun OSS
+oss2>=2.18.0

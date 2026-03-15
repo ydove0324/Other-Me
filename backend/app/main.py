@@ -8,7 +8,7 @@ from fastapi import FastAPI
 from fastapi.middleware.cors import CORSMiddleware
 
 from app.core.config import settings
-from app.routers import auth, profile, fork_points, lives
+from app.routers import auth, profile, fork_points, lives, media
 
 # Configure logging
 logging.basicConfig(
@@ -48,6 +48,7 @@ def create_app() -> FastAPI:
     app.include_router(profile.router)
     app.include_router(fork_points.router)
     app.include_router(lives.router)
+    app.include_router(media.router)
 
     @app.get("/")
     async def root():
