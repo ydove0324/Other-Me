@@ -44,6 +44,17 @@ def _sign_oss_url(url: str | None) -> str | None:
         return url
 
 
+def _get_avatar_url(user: User) -> str | None:
+    """Get the best available avatar URL for user.
+
+    Priority: comic_avatar_url > avatar_url > None
+    """
+    # Prefer comic avatar if available
+    if user.comic_avatar_url:
+        return _sign_oss_url(user.comic_avatar_url)
+    return _sign_oss_url(user.avatar_url)
+
+
 async def _create_tokens(user: User, session: AsyncSession) -> TokenResponse:
     access_token = create_access_token(user_id=user.id)
     raw_refresh = generate_refresh_token()
@@ -90,7 +101,7 @@ async def refresh(body: RefreshRequest, session: Annotated[AsyncSession, Depends
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
-            "avatar_url": _sign_oss_url(user.avatar_url),
+            "avatar_url": _get_avatar_url(user),
             "onboarding_completed": user.onboarding_completed,
         },
     })
@@ -121,7 +132,7 @@ async def get_me(user: Annotated[User, Depends(get_current_user)]):
             "id": user.id,
             "email": user.email,
             "display_name": user.display_name,
-            "avatar_url": _sign_oss_url(user.avatar_url),
+            "avatar_url": _get_avatar_url(user),
             "onboarding_completed": user.onboarding_completed,
         },
     )

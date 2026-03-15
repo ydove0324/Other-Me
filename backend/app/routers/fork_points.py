@@ -93,7 +93,7 @@ async def list_fork_points(
             emotional_context=fp.emotional_context,
             status=fp.status.value,
             created_at=fp.created_at,
-            has_timeline="timeline" in lives_map[fp.id],
+            has_timeline="timeline" in lives_map[fp.id] or "blocks" in lives_map[fp.id],
             has_story="story" in lives_map[fp.id],
         ).model_dump(mode="json")
         for fp in fps

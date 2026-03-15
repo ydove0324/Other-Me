@@ -57,8 +57,39 @@ async def upload_photo(
     return ApiResponse(data={"photo_url": photo_url, "avatar_url": user.avatar_url})
 
 
-async def _generate_comic_avatar(user_id: int, photo_url: str) -> None:
-    """Background task: generate a comic-style avatar from the user's photo and save to OSS."""
+AVATAR_STYLES: dict[str, str] = {
+    "comic": "warm, delicate comic illustration style with soft colors, storybook character",
+    "chibi": "cute chibi/Q-version style with big head and small body, adorable and playful",
+    "realistic": "realistic portrait style with natural lighting and details",
+    "sketch": "elegant pencil sketch style with artistic line work",
+    "watercolor": "soft watercolor painting style with gentle color blending",
+}
+
+DEFAULT_AVATAR_PROMPT = (
+    "Extract the main person from the photo and convert into a beautifully illustrated character. "
+    "Remove the background completely - use transparent or pure white background. "
+    "Focus only on the person, cropping tightly around the figure. "
+    "Preserve facial features accurately. "
+)
+
+
+async def _generate_comic_avatar(
+    user_id: int,
+    photo_url: str,
+    style: str = "comic",
+    use_as_avatar: bool = True,
+) -> str | None:
+    """Background task: generate a styled avatar from the user's photo and save to OSS.
+
+    Args:
+        user_id: User ID
+        photo_url: Source photo URL
+        style: Avatar style - comic, chibi, realistic, sketch, watercolor
+        use_as_avatar: Whether to set this as the user's main avatar_url
+
+    Returns:
+        The generated avatar URL, or None if failed
+    """
     from app.services.image_gen_service import generate_image
     from app.services.oss_service import upload_from_url, new_key, sign_url
 
@@ -66,11 +97,8 @@ async def _generate_comic_avatar(user_id: int, photo_url: str) -> None:
         # Generate a signed URL so the external image generation API can fetch the photo
         signed_photo_url = sign_url(photo_url, expires=3600)
 
-        prompt = (
-            "Convert the person in the photo into a beautifully illustrated storybook character. "
-            "Preserve facial features. Warm, delicate illustration style with soft colors. "
-            "Suitable for a life narrative story."
-        )
+        style_desc = AVATAR_STYLES.get(style, AVATAR_STYLES["comic"])
+        prompt = f"{DEFAULT_AVATAR_PROMPT} Style: {style_desc}."
         generated_url = await generate_image(prompt, reference_image_url=signed_photo_url)
 
         object_key = new_key(f"comic-avatars/{user_id}")
@@ -81,11 +109,16 @@ async def _generate_comic_avatar(user_id: int, photo_url: str) -> None:
             user = result.scalar_one_or_none()
             if user:
                 user.comic_avatar_url = oss_url
+                if use_as_avatar:
+                    user.avatar_url = oss_url
                 await session.commit()
-                logger.info(f"Comic avatar saved for user {user_id}: {oss_url}")
+                logger.info(f"Avatar saved for user {user_id}: {oss_url} (style={style})")
+                return oss_url
+        return None
 
     except Exception as e:
-        logger.error(f"Comic avatar generation failed for user {user_id}: {e}")
+        logger.error(f"Avatar generation failed for user {user_id}: {e}")
+        return None
 
 
 @router.get("/avatar-info", response_model=ApiResponse)
@@ -107,6 +140,49 @@ async def get_avatar_info(
         "photo_url": _sign(user.photo_url),
         "avatar_url": _sign(user.avatar_url),
         "comic_avatar_url": _sign(user.comic_avatar_url),
+    })
+
+
+@router.post("/regenerate-avatar", response_model=ApiResponse)
+async def regenerate_avatar(
+    background_tasks: BackgroundTasks,
+    style: str = "comic",
+    user: Annotated[User, Depends(get_current_user)] = ...,
+    session: Annotated[AsyncSession, Depends(get_session)] = ...,
+):
+    """Regenerate user's avatar with selected style.
+
+    Args:
+        style: Avatar style - comic, chibi, realistic, sketch, watercolor
+    """
+    # Validate style
+    if style not in AVATAR_STYLES:
+        valid_styles = ", ".join(AVATAR_STYLES.keys())
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail=f"无效的风格选择。支持的风格: {valid_styles}"
+        )
+
+    # Check if user has a photo to use as reference
+    if not user.photo_url:
+        raise HTTPException(
+            status_code=status.HTTP_400_BAD_REQUEST,
+            detail="请先上传照片后再生成头像"
+        )
+
+    # Kick off avatar generation in background
+    background_tasks.add_task(_generate_comic_avatar, user.id, user.photo_url, style, True)
+
+    return ApiResponse(data={
+        "message": "头像生成任务已启动，请稍后刷新查看",
+        "style": style,
+        "style_name": {
+            "comic": "漫画风格",
+            "chibi": "Q版风格",
+            "realistic": "写实风格",
+            "sketch": "素描风格",
+            "watercolor": "水彩风格",
+        }.get(style, style),
     })
 
 

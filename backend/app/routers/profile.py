@@ -42,6 +42,17 @@ def _sign_oss_url(url: str | None) -> str | None:
         return url
 
 
+def _get_avatar_url(user: User) -> str | None:
+    """Get the best available avatar URL for user.
+
+    Priority: comic_avatar_url > avatar_url > None
+    """
+    # Prefer comic avatar if available
+    if user.comic_avatar_url:
+        return _sign_oss_url(user.comic_avatar_url)
+    return _sign_oss_url(user.avatar_url)
+
+
 @router.get("/tags", response_model=ApiResponse)
 async def get_tags(session: Annotated[AsyncSession, Depends(get_session)]):
     result = await session.execute(
@@ -264,7 +275,7 @@ async def get_profile_summary(
         user_id=user.id,
         display_name=user.display_name,
         email=user.email,
-        avatar_url=_sign_oss_url(user.avatar_url),
+        avatar_url=_get_avatar_url(user),
         onboarding_completed=user.onboarding_completed,
         selected_tags=[TagResponse(id=t.id, name=t.name, display_name=t.display_name, description=t.description) for t in tags],
         persona=PersonaResponse(
