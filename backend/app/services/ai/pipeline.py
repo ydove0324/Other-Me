@@ -871,7 +871,9 @@ async def _plan_and_generate_images(
     # Build a map: block_index → scene
     scene_by_index: dict[int, LifeScene] = {s.sort_order: s for s in db_scenes}
 
-    # ── Step 2: Concurrently generate + upload images ──
+    # ── Step 2: Concurrently generate + upload images (max 2 at a time) ──
+    sem = asyncio.Semaphore(2)
+
     async def _gen_one(plan: dict) -> dict | None:
         block_index = plan.get("block_index")
         prompt = plan.get("prompt", "")
@@ -880,19 +882,18 @@ async def _plan_and_generate_images(
         scene = scene_by_index.get(block_index)
         if scene is None:
             return None
-        try:
-            # Use comic avatar as reference if available → character-consistent image editing
-            # If no avatar → pure text-to-image generation
-            img_url = await generate_image(
-                prompt=prompt,
-                reference_image_url=comic_avatar_url,
-            )
-            oss_key = new_key(f"story-images/{user_id}")
-            oss_url = await upload_from_url(img_url, oss_key)
-            return {"block_index": block_index, "scene_id": scene.id, "image_url": oss_url}
-        except Exception as e:
-            logger.error(f"Image generation failed for block {block_index}: {e}")
-            return None
+        async with sem:
+            try:
+                img_url = await generate_image(
+                    prompt=prompt,
+                    reference_image_url=comic_avatar_url,
+                )
+                oss_key = new_key(f"story-images/{user_id}")
+                oss_url = await upload_from_url(img_url, oss_key)
+                return {"block_index": block_index, "scene_id": scene.id, "image_url": oss_url}
+            except Exception as e:
+                logger.error(f"Image generation failed for block {block_index}: {e}")
+                return None
 
     results = await asyncio.gather(*[_gen_one(p) for p in image_plans])
 
