@@ -601,6 +601,55 @@ async def generate_story_questions(
     return data.get("questions", [])
 
 
+async def _generate_life_title(
+    fp: ForkPoint,
+    persona_text: str,
+    user_answers: list[dict] | None,
+) -> str:
+    """Generate a poetic/literary title for the alternative life story."""
+    answers_summary = ""
+    if user_answers:
+        answers_summary = "\n".join(
+            f"- {a.get('question', '?')}：{a.get('answer', '?')}"
+            for a in user_answers
+        )
+
+    title_prompt = f"""你是一位才华横溢的标题创作大师。请为下面这个"未选择之路"的人生故事创作一个诗意、文学性强的标题。
+
+## 分岔点信息
+- 用户描述：{fp.title}
+- 背景：{fp.description or '未提供'}
+- 实际选择：{fp.actual_choice}
+- 未走的那条路：{fp.alternative_choice}
+
+## 人物画像
+{persona_text}
+
+## 用户对故事的期望
+{answers_summary or '未提供'}
+
+## 要求
+1. 标题要简洁有力，4-12个字为宜
+2. 要有文学性和诗意，能引发共鸣
+3. 不要直接使用用户输入的描述，要进行艺术化的提炼和总结
+4. 标题应该能概括"如果当初走了另一条路"这种平行人生的意境
+
+请以 JSON 格式输出：
+{{
+  "title": "生成的标题"
+}}"""
+
+    try:
+        data, _ = await call_llm_json([
+            {"role": "system", "content": "你是一位标题创作大师。请用 JSON 格式回复。"},
+            {"role": "user", "content": title_prompt},
+        ], temperature=0.8, max_tokens=256)
+        return data.get("title", fp.title)
+    except Exception:
+        # Fallback to original title if generation fails
+        return fp.title
+
+
 async def generate_life_blocks_stream(
     user_id: int,
     fork_point_id: int,
@@ -627,6 +676,9 @@ async def generate_life_blocks_stream(
     persona = await _get_latest_persona(user_id, session)
     persona_text = persona.persona_summary if persona else "（用户尚未生成画像）"
 
+    # Generate AI title first
+    ai_title = await _generate_life_title(fp, persona_text, user_answers)
+
     quiz_answers_text = "（未提供）"
     if persona and persona.raw_input_data:
         qa = persona.raw_input_data.get("quiz_answers")
@@ -640,7 +692,7 @@ async def generate_life_blocks_stream(
     prompt = render_template(template, {
         "persona": persona_text,
         "fork_date": str(fp.happened_at) if fp.happened_at else "不确定",
-        "fork_title": fp.title,
+        "fork_title": ai_title,
         "fork_description": fp.description or "",
         "actual_choice": fp.actual_choice,
         "alternative_choice": fp.alternative_choice,
@@ -756,8 +808,8 @@ async def generate_life_blocks_stream(
 
         # Save to DB
         life.story_markdown = full_text
-        life.story_title = parsed_blocks[0]["title"] if parsed_blocks else fp.title
-        life.overview = fp.title
+        life.story_title = parsed_blocks[0]["title"] if parsed_blocks else ai_title
+        life.overview = ai_title
         life.status = LifeStatus.completed
 
         db_scenes: list[LifeScene] = []
@@ -871,8 +923,8 @@ async def _plan_and_generate_images(
     # Build a map: block_index → scene
     scene_by_index: dict[int, LifeScene] = {s.sort_order: s for s in db_scenes}
 
-    # ── Step 2: Concurrently generate + upload images (max 2 at a time) ──
-    sem = asyncio.Semaphore(2)
+    # ── Step 2: Concurrently generate + upload images (max 1 at a time with delay) ──
+    sem = asyncio.Semaphore(2)  # 改为1，确保串行执行
 
     async def _gen_one(plan: dict) -> dict | None:
         block_index = plan.get("block_index")
@@ -887,6 +939,7 @@ async def _plan_and_generate_images(
                 img_url = await generate_image(
                     prompt=prompt,
                     reference_image_url=comic_avatar_url,
+                    max_retries=5,  # 增加重试次数
                 )
                 oss_key = new_key(f"story-images/{user_id}")
                 oss_url = await upload_from_url(img_url, oss_key)
@@ -894,6 +947,9 @@ async def _plan_and_generate_images(
             except Exception as e:
                 logger.error(f"Image generation failed for block {block_index}: {e}")
                 return None
+            finally:
+                # 每个请求完成后等待3秒，避免触发API限流
+                await asyncio.sleep(3)
 
     results = await asyncio.gather(*[_gen_one(p) for p in image_plans])
 

@@ -34,6 +34,8 @@ export default function LifeView() {
   const [phase, setPhase] = useState<Phase>('init');
   const [forkPoint, setForkPoint] = useState<ForkPoint | null>(null);
   const [blocks, setBlocks] = useState<LifeBlock[]>([]);
+  const [currentPage, setCurrentPage] = useState(0);
+  const [lifeData, setLifeData] = useState<LifeBlocksData | null>(null);
   const [questions, setQuestions] = useState<StoryQuestion[]>([]);
   const [selectedAnswers, setSelectedAnswers] = useState<Record<string, string>>({});
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
@@ -48,6 +50,13 @@ export default function LifeView() {
   // (e.g. from React StrictMode double-invocation) won't call setPhase('asking')
   // after the user has already moved past the asking phase.
   const loadIdRef = useRef(0);
+
+  // Reset to first page when blocks change
+  useEffect(() => {
+    if (blocks.length > 0 && currentPage >= blocks.length) {
+      setCurrentPage(0);
+    }
+  }, [blocks, currentPage]);
 
   // Resolve message list for current thinking phase
   const thinkingMessages =
@@ -89,6 +98,7 @@ export default function LifeView() {
     try {
       const res = await api.get<ApiResponse<LifeBlocksData>>(`/fork-points/${forkPointId}/blocks`);
       if (res.data.data && res.data.data.blocks.length > 0) {
+        setLifeData(res.data.data);
         setBlocks(
           res.data.data.blocks.map((s) => ({
             index: s.sort_order,
@@ -321,7 +331,7 @@ export default function LifeView() {
     <div className="min-h-screen bg-canvas bg-gradient-to-b from-[#f0eec8] via-[#e8e8dc] to-[#dde8e0]">
       {/* Header */}
       <header className="bg-white/70 backdrop-blur border-b border-monet-haze/20 sticky top-0 z-10">
-        <div className="max-w-7xl mx-auto px-6 py-4 flex items-center justify-between">
+        <div className="max-w-4xl mx-auto px-6 py-4 flex items-center justify-between">
           <button
             onClick={() => navigate('/dashboard')}
             className="text-monet-haze hover:text-monet-leaf transition-colors font-serif"
@@ -329,7 +339,7 @@ export default function LifeView() {
             ← 返回
           </button>
           <h1 className="text-lg font-bold text-monet-leaf font-serif">
-            {forkPoint?.title || '平行人生'}
+            {lifeData?.overview || forkPoint?.title || '平行人生'}
           </h1>
           <div className="w-12" />
         </div>
@@ -519,100 +529,167 @@ export default function LifeView() {
         </div>
       )}
 
-      {/* Blocks content */}
+      {/* Paged Blocks content */}
       {(isStreaming || phase === 'done') && (displayBlocks.length > 0 || pendingSkeletons.length > 0) && (
-        <div className="max-w-7xl mx-auto px-6 py-10">
-          <div className="flex gap-8">
-            {/* Left: narrative blocks */}
-            <div className="flex-1 min-w-0 space-y-8">
-              {displayBlocks.map((block) => (
-                <motion.div
-                  key={block.index}
-                  ref={(el) => { if (el) blockRefs.current.set(block.index, el); }}
-                  initial={{ opacity: 0, y: 20 }}
-                  animate={{ opacity: 1, y: 0 }}
-                  transition={{ duration: 0.4 }}
-                  className="bg-white/80 rounded-2xl border border-monet-haze/20 p-8 shadow-monet"
-                >
-                  {block.title && (
-                    <h2 className="font-serif text-xl font-bold text-monet-leaf mb-4">
-                      {block.title}
-                    </h2>
-                  )}
-                  <article className="prose prose-indigo max-w-none prose-headings:text-monet-leaf prose-headings:font-serif prose-p:text-monet-leaf/80 prose-p:leading-relaxed prose-p:font-serif">
-                    <ReactMarkdown>{block.content}</ReactMarkdown>
-                    {block.status === 'streaming' && (
-                      <span className="inline-block w-0.5 h-4 bg-monet-sage align-middle animate-pulse ml-0.5" />
-                    )}
-                  </article>
-                </motion.div>
-              ))}
+        <div className="max-w-5xl mx-auto px-6 py-10">
+          {/* Story Title */}
+          {phase === 'done' && lifeData?.overview && (
+            <motion.div
+              initial={{ opacity: 0, y: -10 }}
+              animate={{ opacity: 1, y: 0 }}
+              className="text-center mb-8"
+            >
+              <h1 className="font-serif text-3xl font-bold text-monet-leaf mb-3">
+                {lifeData.overview}
+              </h1>
+              <p className="font-serif text-monet-haze text-sm">
+                如果当初{forkPoint?.alternative_choice}
+              </p>
+            </motion.div>
+          )}
 
-              {pendingSkeletons.map((block) => (
-                <div
-                  key={`skeleton-${block.index}`}
-                  className="bg-white/40 rounded-2xl border border-monet-haze/10 p-8 animate-pulse"
-                >
-                  <div className="h-6 bg-monet-haze/20 rounded w-1/3 mb-4" />
-                  <div className="space-y-3">
+          {/* Page Navigation Header */}
+          {displayBlocks.length > 0 && (
+            <div className="flex items-center justify-center gap-4 mb-6">
+              {/* Previous Button */}
+              <button
+                onClick={() => setCurrentPage((p) => Math.max(0, p - 1))}
+                disabled={currentPage === 0}
+                className="w-10 h-10 rounded-full bg-white/80 border border-monet-haze/20 flex items-center justify-center transition-all hover:bg-white hover:border-monet-sage/40 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <svg className="w-5 h-5 text-monet-leaf" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M15 19l-7-7 7-7" />
+                </svg>
+              </button>
+
+              {/* Page Indicator */}
+              <div className="bg-white/70 rounded-full px-6 py-2 border border-monet-haze/15">
+                <span className="font-serif text-sm text-monet-leaf">
+                  第 {currentPage + 1} / {displayBlocks.length} 章
+                </span>
+              </div>
+
+              {/* Next Button */}
+              <button
+                onClick={() => setCurrentPage((p) => Math.min(displayBlocks.length - 1, p + 1))}
+                disabled={currentPage >= displayBlocks.length - 1}
+                className="w-10 h-10 rounded-full bg-white/80 border border-monet-haze/20 flex items-center justify-center transition-all hover:bg-white hover:border-monet-sage/40 disabled:opacity-30 disabled:cursor-not-allowed"
+              >
+                <svg className="w-5 h-5 text-monet-leaf" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M9 5l7 7-7 7" />
+                </svg>
+              </button>
+            </div>
+          )}
+
+          {/* Current Block Display */}
+          {displayBlocks.length > 0 && currentPage < displayBlocks.length && (
+            <AnimatePresence mode="wait">
+              <motion.div
+                key={currentPage}
+                initial={{ opacity: 0, x: 30 }}
+                animate={{ opacity: 1, x: 0 }}
+                exit={{ opacity: 0, x: -30 }}
+                transition={{ duration: 0.3 }}
+              >
+                {(() => {
+                  const block = displayBlocks[currentPage];
+                  return (
+                    <div className="flex flex-col lg:flex-row gap-6">
+                      {/* Left: Text Content */}
+                      <div className="flex-1 min-w-0">
+                        <div className="bg-white/70 rounded-xl border border-monet-haze/15 p-6 shadow-sm">
+                          {/* Chapter Number Badge */}
+                          <div className="flex items-center gap-3 mb-4">
+                            <span className="text-xs font-serif text-monet-haze/60 bg-monet-haze/10 px-2 py-0.5 rounded-full">
+                              第 {block.index} 章
+                            </span>
+                            {block.status === 'streaming' && (
+                              <span className="flex items-center gap-1 text-xs font-serif text-monet-sage">
+                                <span className="w-1 h-1 rounded-full bg-monet-sage animate-pulse" />
+                                书写中
+                              </span>
+                            )}
+                          </div>
+
+                          {/* Block Title */}
+                          {block.title && (
+                            <h2 className="font-serif text-xl font-bold text-monet-leaf mb-4">
+                              {block.title}
+                            </h2>
+                          )}
+
+                          {/* Content */}
+                          <article className="prose prose-indigo max-w-none prose-headings:text-monet-leaf prose-headings:font-serif prose-p:text-monet-leaf/80 prose-p:leading-relaxed prose-p:font-serif prose-p:my-2 prose-headings:my-3">
+                            <ReactMarkdown>{block.content}</ReactMarkdown>
+                            {block.status === 'streaming' && (
+                              <span className="inline-block w-0.5 h-4 bg-monet-sage align-middle animate-pulse ml-0.5" />
+                            )}
+                          </article>
+                        </div>
+                      </div>
+
+                      {/* Right: Image */}
+                      <div className="lg:w-[45%] flex-shrink-0">
+                        <div className="rounded-xl border border-monet-haze/10 overflow-hidden bg-white/50 h-full min-h-[300px]">
+                          {block.image_status === 'ready' && block.image_url ? (
+                            <motion.img
+                              src={block.image_url}
+                              alt={block.title}
+                              initial={{ opacity: 0 }}
+                              animate={{ opacity: 1 }}
+                              transition={{ duration: 0.6 }}
+                              className="w-full h-full object-cover"
+                            />
+                          ) : block.image_status === 'generating' ? (
+                            <div className="w-full h-full min-h-[300px] flex flex-col items-center justify-center gap-3">
+                              <motion.div
+                                animate={{ rotate: 360 }}
+                                transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
+                                className="w-10 h-10 border-2 border-monet-haze/30 border-t-monet-sage rounded-full"
+                              />
+                              <p className="text-sm text-monet-haze/60 font-serif">插图生成中…</p>
+                            </div>
+                          ) : (
+                            <div className="w-full h-full min-h-[300px] flex items-center justify-center">
+                              <div className="text-center">
+                                <div className="w-16 h-16 mx-auto mb-3 rounded-2xl bg-monet-haze/10 flex items-center justify-center">
+                                  <svg className="w-8 h-8 text-monet-haze/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
+                                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
+                                  </svg>
+                                </div>
+                                <p className="text-sm text-monet-haze/50 font-serif">等待生成插图</p>
+                              </div>
+                            </div>
+                          )}
+                        </div>
+                      </div>
+                    </div>
+                  );
+                })()}
+              </motion.div>
+            </AnimatePresence>
+          )}
+
+          {/* Pending Skeleton (when streaming and no content yet) */}
+          {pendingSkeletons.length > 0 && currentPage >= displayBlocks.length && (
+            <div className="flex flex-col lg:flex-row gap-6">
+              <div className="flex-1 min-w-0">
+                <div className="bg-white/40 rounded-xl border border-monet-haze/10 p-6 animate-pulse">
+                  <div className="h-4 bg-monet-haze/20 rounded w-20 mb-4" />
+                  <div className="h-6 bg-monet-haze/20 rounded w-2/3 mb-4" />
+                  <div className="space-y-2">
                     <div className="h-4 bg-monet-haze/10 rounded w-full" />
                     <div className="h-4 bg-monet-haze/10 rounded w-5/6" />
                     <div className="h-4 bg-monet-haze/10 rounded w-4/6" />
-                    <div className="h-4 bg-monet-haze/10 rounded w-full" />
-                    <div className="h-4 bg-monet-haze/10 rounded w-3/6" />
                   </div>
                 </div>
-              ))}
+              </div>
+              <div className="lg:w-[45%] flex-shrink-0">
+                <div className="bg-white/30 rounded-xl border border-monet-haze/5 h-64 animate-pulse" />
+              </div>
             </div>
-
-            {/* Right: story illustrations */}
-            <div className="hidden lg:block w-[35%] flex-shrink-0 space-y-8">
-              {displayBlocks.map((block) => (
-                <div
-                  key={`img-${block.index}`}
-                  className="rounded-2xl border border-monet-haze/10 aspect-[4/3] overflow-hidden"
-                >
-                  {block.image_status === 'ready' && block.image_url ? (
-                    <motion.img
-                      key={block.image_url}
-                      src={block.image_url}
-                      alt={block.title}
-                      initial={{ opacity: 0, scale: 1.04 }}
-                      animate={{ opacity: 1, scale: 1 }}
-                      transition={{ duration: 0.6 }}
-                      className="w-full h-full object-cover"
-                    />
-                  ) : block.image_status === 'generating' ? (
-                    <div className="w-full h-full bg-white/40 flex flex-col items-center justify-center gap-3">
-                      <motion.div
-                        animate={{ rotate: 360 }}
-                        transition={{ duration: 2, repeat: Infinity, ease: 'linear' }}
-                        className="w-8 h-8 border-2 border-monet-haze/30 border-t-monet-sage rounded-full"
-                      />
-                      <p className="text-xs text-monet-haze/60 font-serif">插图生成中…</p>
-                    </div>
-                  ) : (
-                    <div className="w-full h-full bg-white/40 flex items-center justify-center">
-                      <div className="text-center">
-                        <div className="w-12 h-12 mx-auto mb-3 rounded-xl bg-monet-haze/10 flex items-center justify-center">
-                          <svg className="w-6 h-6 text-monet-haze/40" fill="none" viewBox="0 0 24 24" stroke="currentColor">
-                            <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={1.5} d="M2.25 15.75l5.159-5.159a2.25 2.25 0 013.182 0l5.159 5.159m-1.5-1.5l1.409-1.409a2.25 2.25 0 013.182 0l2.909 2.909M3.75 21h16.5A2.25 2.25 0 0022.5 18.75V5.25A2.25 2.25 0 0020.25 3H3.75A2.25 2.25 0 001.5 5.25v13.5A2.25 2.25 0 003.75 21z" />
-                          </svg>
-                        </div>
-                        <p className="text-sm text-monet-haze/50 font-serif">等待生成</p>
-                      </div>
-                    </div>
-                  )}
-                </div>
-              ))}
-              {pendingSkeletons.map((block) => (
-                <div
-                  key={`img-skeleton-${block.index}`}
-                  className="bg-white/20 rounded-2xl border border-monet-haze/5 aspect-[4/3] animate-pulse"
-                />
-              ))}
-            </div>
-          </div>
+          )}
 
           {/* Actions after completion */}
           {phase === 'done' && displayBlocks.length > 0 && !error && (
