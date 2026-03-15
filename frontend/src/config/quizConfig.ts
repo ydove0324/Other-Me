@@ -37,6 +37,28 @@ export const quizConfig: QuizSection[] = [
     subtitle: '先简单了解一下你',
     questions: [
       {
+        id: 'gender',
+        title: '你的性别？',
+        type: 'single',
+        required: true,
+        options: [
+          { id: 'male', label: '男' },
+          { id: 'female', label: '女' },
+          { id: 'prefer_not', label: '不想透露' },
+        ],
+      },
+      {
+        id: 'orientation',
+        title: '你的性取向？',
+        type: 'single',
+        required: true,
+        options: [
+          { id: 'or_male', label: '男' },
+          { id: 'or_female', label: '女' },
+          { id: 'or_prefer_not', label: '不想透露' },
+        ],
+      },
+      {
         id: 'life_stage',
         title: '你现在的阶段？',
         type: 'single',
