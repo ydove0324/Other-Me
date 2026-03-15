@@ -90,13 +90,16 @@ export default function CreateFork() {
             <label className="block text-sm font-medium text-monet-leaf mb-2 font-serif">
               当时发生了什么？（背景描述）
             </label>
+            <p className="text-xs text-monet-haze mb-1 font-serif">建议输入 100 字以上</p>
             <textarea
               value={form.description}
               onChange={(e) => update("description", e.target.value)}
               placeholder="描述一下当时的情况、你面临的选择..."
-              rows={3}
+              maxLength={300}
+              rows={4}
               className="w-full px-4 py-3 border border-monet-haze/40 rounded-2xl resize-none focus:outline-none focus:ring-2 focus:ring-monet-sage/50 focus:border-monet-sage bg-white/60 placeholder:text-monet-haze/50 font-serif"
             />
+            <p className="text-right text-xs text-monet-haze mt-1 font-serif">{form.description.length}/300</p>
           </div>
 
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">

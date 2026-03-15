@@ -146,6 +146,18 @@ export interface UserAnswer {
   answer: string;
 }
 
+export interface StoryQuestion {
+  id: string;
+  question: string;
+  hint?: string;
+  options: string[];
+}
+
+export interface UserAnswer {
+  question: string;
+  answer: string;
+}
+
 export interface LifeBlocksData {
   id: number;
   fork_point_id: number;

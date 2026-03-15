@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import { quizConfig } from '../../config/quizConfig';
 import BubbleQuestion from './BubbleQuestion';
@@ -15,6 +15,10 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
   const [answers, setAnswers] = useState<Record<string, string | string[]>>({});
   const [submitting, setSubmitting] = useState(false);
   const [error, setError] = useState('');
+  const [hasShownSecondLevelHint, setHasShownSecondLevelHint] = useState(false);
+  const [hasShownPencilHint, setHasShownPencilHint] = useState(false);
+  const [secondLevelToastVisible, setSecondLevelToastVisible] = useState(false);
+  const [pencilToastVisible, setPencilToastVisible] = useState(false);
 
   const section = quizConfig[currentSection];
   const totalSections = quizConfig.length;
@@ -93,6 +97,30 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
     }
   };
 
+  const handleFirstSecondLevel = () => {
+    if (hasShownSecondLevelHint) return;
+    setHasShownSecondLevelHint(true);
+    setSecondLevelToastVisible(true);
+  };
+
+  const handleFirstPencil = () => {
+    if (hasShownPencilHint) return;
+    setHasShownPencilHint(true);
+    setPencilToastVisible(true);
+  };
+
+  useEffect(() => {
+    if (!secondLevelToastVisible) return;
+    const t = setTimeout(() => setSecondLevelToastVisible(false), 4000);
+    return () => clearTimeout(t);
+  }, [secondLevelToastVisible]);
+
+  useEffect(() => {
+    if (!pencilToastVisible) return;
+    const t = setTimeout(() => setPencilToastVisible(false), 4000);
+    return () => clearTimeout(t);
+  }, [pencilToastVisible]);
+
   const isLastSection = currentSection === totalSections - 1;
 
   if (showPhotoUpload) {
@@ -107,21 +135,12 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
           <span>{section.title}</span>
           <span className="flex items-center gap-3">
             {section.skippable && (
-              section.id === 'daily_texture' ? (
-                <button
-                  onClick={handleSkipSection}
-                  className="inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-monet-haze/50 text-monet-haze hover:border-monet-cobalt hover:text-monet-cobalt transition-colors"
-                >
-                  轻松可选，随意作答 · 跳过本部分
-                </button>
-              ) : (
-                <button
-                  onClick={handleSkipSection}
-                  className="text-monet-haze hover:text-monet-cobalt transition-colors"
-                >
-                  跳过本部分
-                </button>
-              )
+              <button
+                onClick={handleSkipSection}
+                className="inline-flex items-center gap-2 px-4 py-2 rounded-full border-2 border-monet-haze/50 text-monet-haze hover:border-monet-cobalt hover:text-monet-cobalt transition-colors"
+              >
+                {section.id === 'daily_texture' ? '轻松可选，随意作答 · 跳过本部分' : '跳过本部分'}
+              </button>
             )}
             <span>{currentSection + 1} / {totalSections}</span>
           </span>
@@ -156,9 +175,34 @@ export default function BubbleQuiz({ onComplete }: BubbleQuizProps) {
                 question={question}
                 answers={answers}
                 onAnswer={handleAnswer}
+                onFirstSecondLevel={handleFirstSecondLevel}
+                onFirstPencil={handleFirstPencil}
+                hasShownSecondLevelHint={hasShownSecondLevelHint}
+                hasShownPencilHint={hasShownPencilHint}
               />
             ))}
           </div>
+
+          {secondLevelToastVisible && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-3 bg-monet-leaf/90 text-white text-sm rounded-2xl shadow-lg font-serif"
+            >
+              这些可以不答，往下划就行
+            </motion.div>
+          )}
+          {pencilToastVisible && (
+            <motion.div
+              initial={{ opacity: 0, y: 20 }}
+              animate={{ opacity: 1, y: 0 }}
+              exit={{ opacity: 0 }}
+              className="fixed bottom-24 left-1/2 -translate-x-1/2 z-50 px-5 py-3 bg-monet-leaf/90 text-white text-sm rounded-2xl shadow-lg font-serif"
+            >
+              点这个可以自己写，写了也能当选项用
+            </motion.div>
+          )}
 
           {/* "但……因为人不是被标签定义的" after self_labels */}
           {section.id === 'daily_texture' && answers['self_labels'] && (Array.isArray(answers['self_labels']) ? (answers['self_labels'] as string[]).length > 0 : false) && (

@@ -1,4 +1,4 @@
-import { useState } from 'react';
+import { useState, useEffect } from 'react';
 import { motion, AnimatePresence } from 'framer-motion';
 import type { QuizQuestion, QuizOption } from '../../config/quizConfig';
 
@@ -7,6 +7,10 @@ interface BubbleQuestionProps {
   answers: Record<string, string | string[]>;
   onAnswer: (questionId: string, value: string | string[]) => void;
   depth?: number;
+  onFirstSecondLevel?: () => void;
+  onFirstPencil?: () => void;
+  hasShownSecondLevelHint?: boolean;
+  hasShownPencilHint?: boolean;
 }
 
 export default function BubbleQuestion({
@@ -14,11 +18,27 @@ export default function BubbleQuestion({
   answers,
   onAnswer,
   depth = 0,
+  onFirstSecondLevel,
+  onFirstPencil,
+  hasShownSecondLevelHint = false,
+  hasShownPencilHint = false,
 }: BubbleQuestionProps) {
   const [customInputs, setCustomInputs] = useState<Record<string, string>>({});
   const [questionNote, setQuestionNote] = useState('');
   const [noteVisible, setNoteVisible] = useState(false);
   const currentValue = answers[question.id];
+
+  useEffect(() => {
+    if (depth === 1 && !hasShownSecondLevelHint && onFirstSecondLevel) {
+      onFirstSecondLevel();
+    }
+  }, [depth, hasShownSecondLevelHint, onFirstSecondLevel]);
+
+  useEffect(() => {
+    if (question.type !== 'text' && !hasShownPencilHint && onFirstPencil) {
+      onFirstPencil();
+    }
+  }, [question.type, hasShownPencilHint, onFirstPencil]);
 
   if (question.type === 'text') {
     return (
@@ -136,6 +156,7 @@ export default function BubbleQuestion({
             type="button"
             onClick={() => setNoteVisible((v) => !v)}
             className="leading-none cursor-pointer select-none"
+            title="点这个可以自己写，写了也能当选项用"
           >
             ✍🏻
           </button>
@@ -156,7 +177,7 @@ export default function BubbleQuestion({
 
       <div
         className="grid gap-4 justify-items-center"
-        style={{ gridTemplateColumns: `repeat(${cols}, minmax(7rem, 1fr))` }}
+        style={{ gridTemplateColumns: `repeat(${cols}, minmax(5.7rem, 1fr))` }}
       >
         {visibleOptions?.map((option) => {
           const selected = isSelected(option.id);
@@ -167,7 +188,7 @@ export default function BubbleQuestion({
               whileTap={{ scale: 0.95 }}
               onClick={() => handleSelect(option)}
               className={`relative flex items-center justify-center rounded-full text-sm font-medium transition-all font-serif
-                w-28 h-28 md:w-32 md:h-32
+                w-[6.3rem] h-[6.3rem] md:w-[7.2rem] md:h-[7.2rem]
                 bg-white/70 text-monet-leaf border
                 ${
                   selected
@@ -241,6 +262,10 @@ export default function BubbleQuestion({
                 answers={answers}
                 onAnswer={onAnswer}
                 depth={depth + 1}
+                onFirstSecondLevel={onFirstSecondLevel}
+                onFirstPencil={onFirstPencil}
+                hasShownSecondLevelHint={hasShownSecondLevelHint}
+                hasShownPencilHint={hasShownPencilHint}
               />
             </motion.div>
           ))

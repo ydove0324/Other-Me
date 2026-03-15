@@ -13,15 +13,40 @@ from app.database import get_session
 from app.models.user import User
 from app.models.fork_point import ForkPoint
 from app.models.life import AlternativeLife, LifeTimelineEvent, LifeScene
+from app.models.memory import UserMemory
 from app.models.base import ForkPointStatus, LifeStatus
 from app.schemas.common import ApiResponse
 from app.schemas.life import (
     AlternativeLifeResponse, TimelineEventResponse, StoryResponse, SceneResponse,
     LifeBlocksResponse, StoryQuestion, StoryQuestionsResponse, GenerateLifeStreamRequest,
+    MemoryPreviewResponse,
 )
 from app.core.deps import get_current_user
 
 router = APIRouter(prefix="/api/v1", tags=["lives"])
+
+
+def _build_memory_content(fp: ForkPoint, user_answers: list[dict] | None) -> str:
+    """Build purely factual memory content from fork point + user answers. No LLM, no invention."""
+    lines = []
+    lines.append(f"分岔点：{fp.title}")
+    if fp.description:
+        lines.append(f"背景：{fp.description}")
+    if fp.happened_at:
+        lines.append(f"时间：{fp.happened_at}")
+    lines.append(f"实际选择：{fp.actual_choice}")
+    lines.append(f"另一条路：{fp.alternative_choice}")
+    if fp.emotional_context and isinstance(fp.emotional_context, dict):
+        parts = [f"{k}：{v}" for k, v in fp.emotional_context.items() if v]
+        if parts:
+            lines.append("当时感受：" + "；".join(parts))
+    elif fp.emotional_context and isinstance(fp.emotional_context, str):
+        lines.append(f"当时感受：{fp.emotional_context}")
+    if user_answers:
+        qa = [f"{a.get('question', '')}：{a.get('answer', '')}" for a in user_answers]
+        lines.append("对故事的期望：")
+        lines.extend(f"  - {x}" for x in qa if x.strip())
+    return "\n".join(lines)
 
 
 @router.post("/fork-points/{fork_point_id}/generate", response_model=ApiResponse)
@@ -280,6 +305,34 @@ async def get_story(
     ).model_dump(mode="json"))
 
 
+@router.delete("/fork-points/{fork_point_id}/story", response_model=ApiResponse)
+async def delete_story(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Delete generated story/blocks for a fork point. Fork point itself is kept."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    result = await session.execute(
+        select(AlternativeLife).where(
+            AlternativeLife.fork_point_id == fork_point_id,
+            AlternativeLife.content_type.in_(["story", "blocks"]),
+        )
+    )
+    lives = result.scalars().all()
+    for life in lives:
+        await session.delete(life)
+
+    await session.commit()
+    return ApiResponse(message="故事已删除")
+
+
 @router.get("/fork-points/{fork_point_id}/story-questions", response_model=ApiResponse)
 async def get_story_questions(
     fork_point_id: int,
@@ -412,3 +465,101 @@ async def get_life_blocks(
             for s in sorted(life.scenes, key=lambda s: s.sort_order)
         ],
     ).model_dump(mode="json"))
+
+
+@router.get("/fork-points/{fork_point_id}/memory-preview", response_model=ApiResponse)
+async def get_memory_preview(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Get the condensed factual summary to show before adding to memory. No invention."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    # Check if already in memory
+    mem_result = await session.execute(
+        select(UserMemory).where(
+            UserMemory.user_id == user.id,
+            UserMemory.fork_point_id == fork_point_id,
+        )
+    )
+    existing = mem_result.scalar_one_or_none()
+    if existing:
+        return ApiResponse(data=MemoryPreviewResponse(
+            content=existing.content,
+            already_added=True,
+        ).model_dump(mode="json"))
+
+    # Load latest blocks life to get user_answers
+    user_answers = None
+    life_result = await session.execute(
+        select(AlternativeLife)
+        .where(
+            AlternativeLife.fork_point_id == fork_point_id,
+            AlternativeLife.content_type == "blocks",
+            AlternativeLife.status == LifeStatus.completed,
+        )
+        .order_by(AlternativeLife.created_at.desc())
+        .limit(1)
+    )
+    life = life_result.scalar_one_or_none()
+    if life and life.generation_metadata:
+        user_answers = life.generation_metadata.get("user_answers")
+
+    content = _build_memory_content(fp, user_answers)
+    return ApiResponse(data=MemoryPreviewResponse(
+        content=content,
+        already_added=False,
+    ).model_dump(mode="json"))
+
+
+@router.post("/fork-points/{fork_point_id}/memories", response_model=ApiResponse)
+async def add_to_memory(
+    fork_point_id: int,
+    user: Annotated[User, Depends(get_current_user)],
+    session: Annotated[AsyncSession, Depends(get_session)],
+):
+    """Add fork point info + story choices to user's memory for future story generation."""
+    result = await session.execute(
+        select(ForkPoint).where(ForkPoint.id == fork_point_id, ForkPoint.user_id == user.id)
+    )
+    fp = result.scalar_one_or_none()
+    if not fp:
+        raise HTTPException(status_code=status.HTTP_404_NOT_FOUND, detail="分岔点不存在")
+
+    # Check if already added
+    mem_result = await session.execute(
+        select(UserMemory).where(
+            UserMemory.user_id == user.id,
+            UserMemory.fork_point_id == fork_point_id,
+        )
+    )
+    if mem_result.scalar_one_or_none():
+        return ApiResponse(data={"added": True, "message": "已加入"}, message="已在记忆库中")
+
+    # Load user_answers from latest blocks
+    user_answers = None
+    life_result = await session.execute(
+        select(AlternativeLife)
+        .where(
+            AlternativeLife.fork_point_id == fork_point_id,
+            AlternativeLife.content_type == "blocks",
+            AlternativeLife.status == LifeStatus.completed,
+        )
+        .order_by(AlternativeLife.created_at.desc())
+        .limit(1)
+    )
+    life = life_result.scalar_one_or_none()
+    if life and life.generation_metadata:
+        user_answers = life.generation_metadata.get("user_answers")
+
+    content = _build_memory_content(fp, user_answers)
+    mem = UserMemory(user_id=user.id, fork_point_id=fork_point_id, content=content)
+    session.add(mem)
+    await session.commit()
+    return ApiResponse(data={"added": True, "message": "已加入"}, message="已加入记忆库")

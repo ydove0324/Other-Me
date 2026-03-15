@@ -73,3 +73,8 @@ class StoryQuestionsResponse(BaseModel):
 
 class GenerateLifeStreamRequest(BaseModel):
     answers: list[dict] | None = None
+
+
+class MemoryPreviewResponse(BaseModel):
+    content: str
+    already_added: bool
