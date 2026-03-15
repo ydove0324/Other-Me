@@ -179,6 +179,8 @@ export default function LifeView() {
       const decoder = new TextDecoder();
       let buffer = '';
 
+      let imagesDone = false;
+
       while (true) {
         const { done, value } = await reader.read();
         if (done) break;
@@ -190,7 +192,13 @@ export default function LifeView() {
         for (const line of lines) {
           if (!line.startsWith('data: ')) continue;
           const payload = line.slice(6);
-          if (payload === '[DONE]') { setPhase('done'); return; }
+
+          // Don't return immediately on [DONE], wait for stream to actually close
+          if (payload === '[DONE]') {
+            imagesDone = true;
+            setPhase('done');
+            continue;
+          }
 
           try {
             const evt: BlockStreamEvent = JSON.parse(payload);
@@ -256,11 +264,20 @@ export default function LifeView() {
                 )
               );
             }
+
+            if (evt.type === 'images_done') {
+              imagesDone = true;
+            }
           } catch (parseErr) {
             if (parseErr instanceof Error && parseErr.message !== 'Unexpected end of JSON input') {
               throw parseErr;
             }
           }
+        }
+
+        // If images are done and we've processed all buffered lines, we can exit
+        if (imagesDone && buffer.trim() === '') {
+          break;
         }
       }
     } catch (err: unknown) {

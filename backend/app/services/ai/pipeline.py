@@ -947,9 +947,8 @@ async def _plan_and_generate_images(
             except Exception as e:
                 logger.error(f"Image generation failed for block {block_index}: {e}")
                 return None
-            finally:
-                # 每个请求完成后等待3秒，避免触发API限流
-                await asyncio.sleep(3)
+        # 每个请求完成后等待3秒，避免触发API限流（在信号量外执行）
+        await asyncio.sleep(3)
 
     results = await asyncio.gather(*[_gen_one(p) for p in image_plans])
 
